@@ -1,4 +1,4 @@
 /sb3
 /images
 /dd*
-__pycache__*
+__pycache__/
