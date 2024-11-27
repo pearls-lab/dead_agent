@@ -21,15 +21,20 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--ddsp', default= False, type=bool)
     parser.add_argument('--snr', default= False, type=bool)
-    parser.add_argument('--sp', default=-1, type=int)
-    parser.add_argument('--iter', default=5, type=int)
-    parser.add_argument('--gamma', default='.9', type=float)
-    parser.add_argument('--theta', default='1e-4', type=float)
+    parser.add_argument('--sp', default=-1, type=int,
+                        help="step penalty")
+    parser.add_argument('--iter', default=5, type=int,
+                        help="Iterations for val_it and tdmpc") # tdmpc: iterations
+    parser.add_argument('--gamma', default='.9', type=float,
+                        help="gamma/discount factor") # Called discount in tdmpc
+    parser.add_argument('--theta', default='1e-4', type=float,
+                        help="theta for val it")
     parser.add_argument('--seed', default=420, type=int)
     parser.add_argument('--fps', default=1, type=int)
-    parser.add_argument('--max_env_steps', default = 100, type=int)
+    parser.add_argument('--max_env_steps', default = 100, type=int) # Called episode length in tdmpc
     parser.add_argument('--reward_file', default= 'rewards.json', type=str)
-    parser.add_argument('--algo', default='val_it',type=str)
+    parser.add_argument('--algo', default='val_it',type=str,
+                        help="val_it, ppo, dqn or tdmpc")
     parser.add_argument('--tp', default=False,type=bool,
                         help="Terminal Poison: Whether or not agent dies after stepping in poison. Default: False")
     parser.add_argument('--dt', default=-1,type=int, 
