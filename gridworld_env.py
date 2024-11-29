@@ -6,7 +6,7 @@ import gymnasium as gym
 
 class GridWorldEnv(gym.Env):
 
-    def __init__(self, size: int = 5, max_steps = 100):
+    def __init__(self, size: int = 5, max_steps: int = 100):
         # The size of the square grid
         self.size                 = size
 
@@ -144,15 +144,19 @@ class GridWorldEnv(gym.Env):
         return reward_at_current_step, terminal
 
     def step(self, action):
-        # Map the action (element of {0,1,2,3}) to the direction we walk in
-        direction = self._action_to_direction[int(action)]
+        reward = 0
         # We use `np.clip` to make sure we don't leave the grid bounds
-        self._agent_location = np.clip(
-            self._agent_location + direction, 0, self.size - 1
-        )
+        if action >= 0 and action < 5:
+            # Map the action (element of {0,1,2,3}) to the direction we walk in
+            direction = self._action_to_direction[int(action)]
+            self._agent_location = np.clip(
+                self._agent_location + direction, 0, self.size - 1
+            )
+        else: reward -= 1
 
         self.steps += 1
-        reward, terminated = self.handle_events()
+        step_reward, terminated = self.handle_events()
+        reward += step_reward
         truncated = False
         observation = self._get_obs()
         info = self._get_info()

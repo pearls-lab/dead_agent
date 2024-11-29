@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from copy import deepcopy
-import tdmpc_helper as h
+import algos.tdmpc_helper as h
 
 
 class TOLD(nn.Module):
