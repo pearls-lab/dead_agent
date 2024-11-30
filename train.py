@@ -4,9 +4,12 @@ import os
 import json
 import torch
 import numpy as np
+import time
+import utils
 from gridworld_env import GridWorldEnv
 from algos.val_it import ValueIteration
 from sb3.stable_baselines3 import A2C, DQN, PPO
+from sb3.stable_baselines3.common.monitor import Monitor
 from algos.tdmpc import TDMPC
 from algos.tdmpc_helper import Episode, ReplayBuffer
 
@@ -144,7 +147,6 @@ def parse_args():
     params = vars(args)
     return params
 
-
 if __name__ == '__main__':
     args             = parse_args()
 
@@ -184,27 +186,50 @@ if __name__ == '__main__':
     #     total_rew                            += rew
 
     # print("Final reward:", total_rew)
+    start_time    = time.time()
+    algos         = {'ppo' : PPO, 'dqn': DQN, 'val_it': ValueIteration}
+    models_tested = {}
+    if args['algo']   == 'ppo': models_tested[args['algo']] = PPO("MlpPolicy", Monitor(env), verbose=1, device = 'cuda')
+    elif args['algo'] == 'dqn': models_tested[args['algo']] = DQN("MlpPolicy", Monitor(env), verbose=1, device = 'cuda')
+    elif args['algo'] == 'all':
+        for algo, model in algos.items():
+            monitored_env = Monitor(env)
+            if algo == 'val_it': models_tested[algo] = model(args, env_size, rewardDictionary)
+            else: models_tested[algo]                = (model("MlpPolicy", monitored_env, verbose=1, device = 'cuda'), monitored_env)
 
-    # # Testing PPO
-    # model = PPO("MlpPolicy", env, verbose=1, device = 'cuda')
-    # model.learn(total_timesteps=100000)
-    # model.save("gw_test")
+    for algo, model_env_tuple in models_tested.items():
+        model, monitored_env = model_env_tuple
+        print("Testing algo:", algo)
+        model.learn(total_timesteps=10000, progress_bar = True)
+        model.save("gw_test")
+        utils.plot_array_and_save(
+            utils.exponential_moving_average(
+                monitored_env.get_episode_rewards()), 
+                "./graphs/" + algo + "_episode_rewards", title = algo + "_episodeRews", 
+                x_label = "episodes", y_label = "rewards", y_max = 6)
+        utils.plot_array_and_save(
+            utils.exponential_moving_average(
+                monitored_env.get_episode_lengths()), 
+                "./graphs/" + algo + "_episode_lengths", title = "title: placeholder", 
+                x_label = "episodes", y_label = "total steps", y_max = max(monitored_env.get_episode_lengths()) + 5)
 
-    # # Testing DQN
-    model = DQN("MlpPolicy", env, verbose=1, device = 'cuda')
-    model.learn(total_timesteps=100000)
-    model.save("gw_test")
+        obs, info = env.reset()
+        done = False
+        steps = 0
+        for i in range(20):
+            action, _state = model.predict(obs, deterministic=True)
+            # print("Action", action)
+            # action, _state = model.predict(FlattenObservation(obs), deterministic=True)
+            obs, reward, done, truncated, info = env.step(action)
+            # env.render()
+            if done:
+                steps = i
+                break
+        print(f"Completed in {steps} steps with score of {reward}")
 
-    obs, info = env.reset()
-    done = False
-    for i in range(20):
-        action, _state = model.predict(obs, deterministic=True)
-        print("Action", action)
-        # action, _state = model.predict(FlattenObservation(obs), deterministic=True)
-        obs, reward, done, truncated, info = env.step(action)
-        env.render()
-        if done:
-            break
+    end_time = time.time()
+    execution_time = end_time - start_time
+    print(f"Execution time: {execution_time} seconds")
 
     
     # Testing TRPO
