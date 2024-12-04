@@ -153,17 +153,19 @@ if __name__ == '__main__':
     rewardDictionary = {
         "goal": 
         {
-            "location": [9,9],
+            "location": [[9,9]],
             "reward": 5,
             "available": True,
-            "terminal": True
+            "terminal": True,
+            "identifier": 19
         },
         "start":
         {
-            "location": [0,0],
+            "location": [[0,0]],
             "reward": 0,
             "available": True,
-            "terminal": False
+            "terminal": False,
+            "identifier": 1
         }
     }
 
@@ -189,8 +191,8 @@ if __name__ == '__main__':
     start_time    = time.time()
     algos         = {'ppo' : PPO, 'dqn': DQN, 'val_it': ValueIteration}
     models_tested = {}
-    if args['algo']   == 'ppo': models_tested[args['algo']] = PPO("MlpPolicy", Monitor(env), verbose=1, device = 'cuda')
-    elif args['algo'] == 'dqn': models_tested[args['algo']] = DQN("MlpPolicy", Monitor(env), verbose=1, device = 'cuda')
+    if args['algo']   == 'ppo': models_tested[args['algo']] = PPO("MlpPolicy", Monitor(env), verbose=0, device = 'cuda')
+    elif args['algo'] == 'dqn': models_tested[args['algo']] = DQN("MlpPolicy", Monitor(env), verbose=0, device = 'cuda')
     elif args['algo'] == 'all':
         for algo, model in algos.items():
             monitored_env = Monitor(env)
@@ -200,7 +202,7 @@ if __name__ == '__main__':
     for algo, model_env_tuple in models_tested.items():
         model, monitored_env = model_env_tuple
         print("Testing algo:", algo)
-        model.learn(total_timesteps=10000, progress_bar = True)
+        model.learn(total_timesteps=50000, progress_bar = True)
         model.save("gw_test")
         utils.plot_array_and_save(
             utils.exponential_moving_average(
@@ -214,19 +216,25 @@ if __name__ == '__main__':
                 x_label = "episodes", y_label = "total steps", y_max = max(monitored_env.get_episode_lengths()) + 5)
 
         obs, info = env.reset()
+        env.print_target_agent()
         done = False
         steps = 0
+        path = []
         for i in range(20):
             action, _state = model.predict(obs, deterministic=True)
             # print("Action", action)
             # action, _state = model.predict(FlattenObservation(obs), deterministic=True)
             obs, reward, done, truncated, info = env.step(action)
+            print("location:", env.get_agent_loc())
+            path.append(env.get_agent_loc(True))
             # env.render()
             if done:
                 steps = i
                 break
         print(f"Completed in {steps} steps with score of {reward}")
-
+        with open("graphs/" + algo + "_path.txt", "w") as text_file: text_file.write(env.print_path(path, return_string = True))
+        env.print_path(path)
+        env.print_path_image(path,'./graphs/' + algo + "path.png", algo + " path")
     end_time = time.time()
     execution_time = end_time - start_time
     print(f"Execution time: {execution_time} seconds")

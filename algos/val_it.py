@@ -15,8 +15,8 @@ class ValueIteration(object):
         self.terminal     = []
         self.convertedRew = {}
         for _, infos in rewardDictionary.items():
-            if infos["terminal"]: self.terminal.append((infos["location"][0] + 1) * (infos["location"][1] + 1) - 1)
-            if infos["reward"] != 0: self.convertedRew[(infos["location"][0] + 1) * (infos["location"][1] + 1) - 1] = infos["reward"]
+            if infos["terminal"]: self.terminal.append((infos["location"][0][0] + 1) * (infos["location"][0][1] + 1) - 1)
+            if infos["reward"] != 0: self.convertedRew[(infos["location"][0][0] + 1) * (infos["location"][0][1] + 1) - 1] = infos["reward"]
 
         # Initialize walls
         self.left_wall, self.right_wall, self.ceiling, self.floor = self.get_boundaries()
