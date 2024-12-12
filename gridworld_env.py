@@ -27,10 +27,10 @@ class GridWorldEnv(gym.Env):
         self.action_space         = gym.spaces.Discrete(4)
         # Dictionary maps the abstract actions to the directions on the grid
         self._action_to_direction = {
-            0: np.array([1, 0]),  # right
-            1: np.array([0, -1]),  # up
-            2: np.array([-1, 0]),  # left
-            3: np.array([0, 1]),  # down
+            0: np.array([0, 1]),  # right
+            1: np.array([-1, 0]),  # up
+            2: np.array([0, -1]),  # left
+            3: np.array([1, 0]),  # down
         }
 
         # Internal metrics
@@ -43,6 +43,7 @@ class GridWorldEnv(gym.Env):
         self.min_dist             = 5
         self.max_steps            = max_steps
         self.locIdenDict          = []
+        self.eval_env             = False
         self.allIdentifiers       = [self._agent_identifier, self._goal_identifier]
         for _, value in self.masterRewardDict.items():
             info       = value
@@ -50,6 +51,9 @@ class GridWorldEnv(gym.Env):
             while identifier in self.allIdentifiers: identifier = np.random.randint(1, 100)
             self.allIdentifiers.append(identifier)
             for location in info['location']: self.locIdenDict[location] = identifier
+        
+        # If > 0: then agent will die when timer hits 0
+        self.active_events         = {}
         
 
     def print_target_agent(self):
@@ -128,10 +132,6 @@ class GridWorldEnv(gym.Env):
         if 'start' in self.masterRewardDict.keys(): location = self.masterRewardDict['start']['location'][0]
         else:                                       location = self._agent_location
 
-        # Iniitalize start square
-        # flattened_location       = 10*location[0] + location[1]
-        # rgba[flattened_location] = 0.0, 0.5, 0.8, 1.0
-        # colored_spots.append(flattened_location)
         rgba[location[0]][location[1]] = 0.0, 0.5, 0.8, 1.0
         colored_spots.append(location)
 
@@ -139,12 +139,14 @@ class GridWorldEnv(gym.Env):
         if 'goal' in self.masterRewardDict.keys(): location = self.masterRewardDict['goal']['location'][0]
         else:                                      location = self._target_location
 
-        # Initialize goal location
-        # flattened_location       = 10*location[0] + location[1]
-        # rgba[flattened_location] = 0.8, 0.5, 0.0, 1.0
-        # colored_spots.append(flattened_location)
         rgba[location[0]][location[1]] = 0.8, 0.5, 0.0, 1.0
         colored_spots.append(location)
+
+        if 'dead_areas' in self.masterRewardDict.keys():
+            for location in self.masterRewardDict['dead_areas']['location']:
+                rgba[location[0]][location[1]] = 0.5, 0.5, 0.5, 1.0
+                colored_spots.append(location)
+
 
         # Highlight path taken
         fig, ax = plt.subplots()
@@ -185,19 +187,26 @@ class GridWorldEnv(gym.Env):
 
         }
     
-    def load_rewards(self, reward_dictionary):
+    def load_rewards(self, reward_dictionary, eval_env = False):
         # Initializes master and temp reward dictionary
         # Temp is 'reloaded' from master when the env resets
+        self.eval_env         = eval_env
         self.masterRewardDict = reward_dictionary.copy()
         self.tempRewardDict   = self.masterRewardDict.copy()
-        self.event_locations  = [info["location"] for _, info in reward_dictionary.items()]
+        self.event_locations  = []
+        for _, info in reward_dictionary.items():
+            for location in info['location']:
+                self.event_locations.append(self.get_flat_loc(location))
         if "goal" in reward_dictionary.keys(): 
             self._target_location  = np.array(reward_dictionary["goal"]["location"][0])
             self._goal_identifier  = int(reward_dictionary["goal"]["identifier"])
         if "start" in reward_dictionary.keys(): 
             self._agent_location   = np.array(reward_dictionary["start"]["location"][0])
             self._agent_identifier = int(reward_dictionary['start']['identifier'])
-        
+
+    def get_flat_loc(self, location):    
+        return location[0] * 10 + location[1]
+    
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         # We need the following line to seed self.np_random
         super().reset(seed=seed)
@@ -206,6 +215,7 @@ class GridWorldEnv(gym.Env):
         self.steps             = 0
         self.cumulative_reward = 0
         self.tempRewardDict    = self.masterRewardDict.copy()
+        self.active_events     = {}
 
         # Choose the agent's location uniformly at random if not specified
         if "start" not in self.masterRewardDict.keys(): self._agent_location = self.np_random.integers(0, self.size, size=2, dtype=int)
@@ -226,15 +236,27 @@ class GridWorldEnv(gym.Env):
     
     def handle_events(self):
         # TODO: Do handling for special events or something
-        reward_at_current_step = 0
+        reward_at_current_step = -0.01
         terminal               = False
+        flat_agent_loc         = self.get_flat_loc(self._agent_location)
 
-        if not any((self._agent_location == subarray).all() for subarray in self.event_locations): return reward_at_current_step, terminal
-        for event, info in self.masterRewardDict.items():
-            if (self._agent_location == info["location"]).all(): 
-                reward_at_current_step   += info['reward']
-                info['available']         = False
-                if not terminal: terminal = info['terminal'] # terminal event + non terminal event = terminal
+        if 'dying' in self.active_events:
+            if self.active_events['dying'] <= 0:
+                return -5, True
+            else:
+                self.active_events['dying'] -= 1
+
+        if flat_agent_loc not in self.event_locations: return reward_at_current_step, terminal
+
+        for key, info in self.masterRewardDict.items():
+            for location in info["location"]:
+                if (self._agent_location == location).all(): 
+                    # if key == 'dead_areas': 
+                    #     if 'dying' not in self.active_events.keys(): self.active_events['dying'] = np.random.randint(1, 5)
+                    # else:
+                    reward_at_current_step   += info['reward']
+                    info['available']         = False
+                    if not terminal: terminal = info['terminal'] # terminal event + non terminal event = terminal
 
         return reward_at_current_step, terminal
 

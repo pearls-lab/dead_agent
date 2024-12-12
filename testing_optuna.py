@@ -63,7 +63,7 @@ def objective(trial: optuna.Trial) -> float:
     env.load_rewards(rewardDictionary)
 
     env = Monitor(env)
-    model = PPO("MlpPolicy", env=env, seed=None, verbose=0, tensorboard_log=path, **sampled_hyperparams)
+    model = PPO("MlpPolicy", env=env, seed=None, verbose=0, tensorboard_log=path, device = 'cuda', **sampled_hyperparams)
 
     stop_callback = StopTrainingOnNoModelImprovement(max_no_improvement_evals=30, min_evals=50, verbose=1)
     eval_callback = TrialEvalCallback(
@@ -76,7 +76,7 @@ def objective(trial: optuna.Trial) -> float:
         f.write(str(params))
 
     try:
-        model.learn(10000000, callback=eval_callback)
+        model.learn(50000, callback=eval_callback)
         env.close()
     except (AssertionError, ValueError) as e:
         env.close()
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     )
 
     try:
-        study.optimize(objective, n_jobs=4, n_trials=128)
+        study.optimize(objective, n_jobs=1, n_trials=128, show_progress_bar = True)
     except KeyboardInterrupt:
         pass
 

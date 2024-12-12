@@ -16,8 +16,12 @@ class ValueIteration(object):
         self.convertedRew = {}
         for _, infos in rewardDictionary.items():
             if infos["terminal"]: self.terminal.append((infos["location"][0][0] + 1) * (infos["location"][0][1] + 1) - 1)
-            if infos["reward"] != 0: self.convertedRew[(infos["location"][0][0] + 1) * (infos["location"][0][1] + 1) - 1] = infos["reward"]
+            if infos["reward"] != 0: 
+                for location in infos['location']:
+                    flat_loc = location[0] * 10 + location[1]
+                    self.convertedRew[flat_loc] = infos["reward"]
 
+        print(self.convertedRew)
         # Initialize walls
         self.left_wall, self.right_wall, self.ceiling, self.floor = self.get_boundaries()
 
@@ -66,6 +70,7 @@ class ValueIteration(object):
                 for item, infos in self.rewards.items():
                     if n_state in self.convertedRew.keys(): 
                         reward += infos['reward']
+                        print(reward)
 
                 P[(state ,action)] = (n_state, reward)
 
@@ -270,12 +275,13 @@ class ValueIteration(object):
         self.get_policy()
         return self.get_path()
     
-    def forward(self, obs):
-        grid           = obs[:-1]
-        agent_loc      = int(obs[-1])
+    def predict(self, obs, deterministic = False):
+        grid           = obs
+        agent_loc      = np.where(obs == 1)[0][0]
+        print("agent loc", agent_loc)
 
         # Save last state so that if there are no changes we dont need to val it all over again
-        if (grid == self.last_state).all(): return self.act_map[self.policy[agent_loc]]
+        if (grid == self.last_state).all(): return self.act_map[self.policy[agent_loc]], obs
         else: self.last_state = grid
         
         # We know this should be a square grid so get the length by taking the square root
@@ -293,8 +299,5 @@ class ValueIteration(object):
 
         self.env = square_grid
 
-        self.value_iteration()
-        return self.act_map[self.policy[agent_loc]]
-        print("V", self.v)
-        print("policy", self.policy)
-        print(self.get_path())
+        path = self.value_iteration()
+        return self.act_map[self.policy[agent_loc]], obs
