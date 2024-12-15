@@ -231,7 +231,6 @@ class GridWorldEnv(gym.Env):
 
         observation = self._get_obs()
         info = self._get_info()
-
         return observation, info
     
     def handle_events(self):
@@ -240,11 +239,11 @@ class GridWorldEnv(gym.Env):
         terminal               = False
         flat_agent_loc         = self.get_flat_loc(self._agent_location)
 
-        if 'dying' in self.active_events:
-            if self.active_events['dying'] <= 0:
-                return -5, True
-            else:
-                self.active_events['dying'] -= 1
+        # if 'dying' in self.active_events:
+        #     if self.active_events['dying'] <= 0:
+        #         return -5, True
+        #     else:
+        #         self.active_events['dying'] -= 1
 
         if flat_agent_loc not in self.event_locations: return reward_at_current_step, terminal
 

@@ -13,6 +13,7 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import EvalCallback
 from algos.tdmpc import TDMPC
 from algos.tdmpc_helper import Episode, ReplayBuffer
+from dqn2 import DQN2
 
 def format_save_file(params):
     file_string    = ""
@@ -107,7 +108,7 @@ if __name__ == '__main__':
 
     # print("Final reward:", total_rew)
     start_time    = time.time()
-    algos         = {'ppo' : PPO, 'dqn': DQN, 'val_it': ValueIteration}
+    algos         = {'ppo' : PPO, 'dqn': DQN2, 'val_it': ValueIteration}
     models_tested = {}
     seed = 9
     if args['algo']   == 'val_it':
@@ -120,7 +121,7 @@ if __name__ == '__main__':
     elif args['algo'] == 'dqn': 
         monitored_env = Monitor(env)
         models_tested[args['algo']] = (
-            DQN("MlpPolicy", monitored_env, verbose=1, target_update_interval = 100, exploration_final_eps = 0.2, device = 'cuda', seed = seed), 
+            DQN2("MlpPolicy", monitored_env, verbose=1, target_update_interval = 100, exploration_final_eps = 0.2, device = 'cuda', seed = seed), 
             monitored_env)
     elif args['algo'] == 'all':
         for algo, model in algos.items():
