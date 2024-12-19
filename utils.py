@@ -1,3 +1,20 @@
+from collections import Counter
+
+def flatten_and_count_unique(array_2d):
+    """
+    Flattens a 2D array and counts unique elements.
+
+    Parameters:
+        array_2d (list of list of int/float): The 2D array to process.
+
+    Returns:
+        dict: A dictionary with unique elements as keys and their counts as values.
+    """
+    # Flatten the 2D array and count elements in one pass
+    element_counts = Counter(element for row in array_2d for element in row)
+    return dict(element_counts)
+
+
 def exponential_moving_average(data, window = 10):
     # ChatGPT generated
     """
@@ -38,7 +55,8 @@ def plot_array_and_save(array, output_path, title = "title: placeholder", x_labe
     - output_path (str): Path where the image will be saved.
     """
     if not isinstance(array, np.ndarray):
-        raise ValueError("Input array must be a numpy array.")
+        print("Wrapping array in numpy array...")
+        array = np.array(array)
     if array.ndim != 1:
         raise ValueError("Input array must be 1-dimensional.")
 

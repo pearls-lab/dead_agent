@@ -1,8 +1,10 @@
 # Based on https://gymnasium.farama.org/introduction/create_custom_env/
 from typing import Optional
 import numpy as np
+import pandas as pd
 import gymnasium as gym
 import matplotlib.pyplot as plt
+import utils
 
 
 class GridWorldEnv(gym.Env):
@@ -54,11 +56,21 @@ class GridWorldEnv(gym.Env):
         
         # If > 0: then agent will die when timer hits 0
         self.active_events         = {}
+        self.all_locs              = []
+        self.game_locs             = []
+        self.last_ten_game_locs    = []
         
 
     def print_target_agent(self):
         print("Agent:", self._agent_location)
         print("Target:", self._target_location)
+
+    def plot_game_loc_diversity(self, algo):
+        print(self.last_ten_game_locs)
+        utils.plot_array_and_save(
+                    self.last_ten_game_locs, 
+                    "./graphs/" + algo + "_buffer_diversity", title = algo + " buffer div", 
+                    x_label = "episodes", y_label = "uniq locations", y_max = 100)
 
     def get_grid(self):
         grid                                                     = np.zeros((self.size, self.size))
@@ -205,7 +217,7 @@ class GridWorldEnv(gym.Env):
             self._agent_identifier = int(reward_dictionary['start']['identifier'])
 
     def get_flat_loc(self, location):    
-        return location[0] * 10 + location[1]
+        return int(location[0] * 10 + location[1])
     
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         # We need the following line to seed self.np_random
@@ -231,6 +243,12 @@ class GridWorldEnv(gym.Env):
 
         observation = self._get_obs()
         info = self._get_info()
+        if len(self.game_locs) >= 100:
+            self.last_ten_game_locs.append(len(list(utils.flatten_and_count_unique(self.game_locs).keys())))
+            self.game_locs.pop(0)
+        self.game_locs.append(self.all_locs)
+        self.all_locs = [0]
+        # print("Total locations: ", len(self.all_locs))
         return observation, info
     
     def handle_events(self):
@@ -271,12 +289,15 @@ class GridWorldEnv(gym.Env):
             
         else: reward -= 1
 
-        self.steps += 1
+        self.steps             += 1
         step_reward, terminated = self.handle_events()
-        reward += step_reward
-        truncated = False
-        observation = self._get_obs()
-        info = self._get_info()
+        reward                 += step_reward
+        truncated               = False
+        observation             = self._get_obs()
+        info                    = self._get_info()
+        self.all_locs.append(self.get_flat_loc(self._agent_location))
+        # print(len(np.unique(self.all_locs)))
+        # print(len(np.sort(pd.unique(np.array(self.all_locs)))))
         if self.steps > self.max_steps: terminated = True
         return observation, reward, terminated, truncated, info
     

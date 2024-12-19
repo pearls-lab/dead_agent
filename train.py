@@ -7,6 +7,7 @@ import numpy as np
 import time
 import utils
 from gridworld_env import GridWorldEnv
+from minigrid_custom import SimpleEnv
 from algos.val_it import ValueIteration
 from sb3.stable_baselines3 import A2C, DQN, PPO
 from stable_baselines3.common.monitor import Monitor
@@ -44,6 +45,8 @@ def parse_args():
     parser.add_argument('--reward_file', default= 'rewards.json', type=str)
     parser.add_argument('--algo', default='val_it',type=str,
                         help="val_it, ppo, dqn or tdmpc")
+    parser.add_argument('--env', default='minigrid',type=str,
+                        help="minigrid or gridworld")
     parser.add_argument('--tp', default=False,type=bool,
                         help="Terminal Poison: Whether or not agent dies after stepping in poison. Default: False")
     parser.add_argument('--dt', default=-1,type=int, 
@@ -77,24 +80,37 @@ if __name__ == '__main__':
             "terminal": False,
             "identifier": 1
         }
-        ,"dead_areas": 
-        {
-            "location": [[3,0], [3,1], [3,2], [3,3], [3,4],
-                         [7,9], [7,8], [7,7], [7,6], [7,5]],
-            "reward": -10,
-            "available": True,
-            "terminal": False,
-            "identifier": -99
-        }
+        # ,"dead_areas": 
+        # {
+        #     # "location": [[3,0], [3,1], [3,2], [3,3], [3,4],
+        #     #              [7,9], [7,8], [7,7], [7,6], [7,5]],
+        #     "location": [[5,0], [5,1], [5,2], [5,3], [5,4], [5,5]],
+        #     "reward": -5,
+        #     "available": True,
+        #     "terminal": False,
+        #     "identifier": -99
+        # }
     }
 
     # save_location    = format_save_file(params)
     # print(f'Saving files at {save_location}')
     # with open('./' + save_location + '/args.json', 'w') as fp: json.dump(params, fp)
 
-    env_size   = 10
-    env        = gym.make("gymnasium_env/GridWorld-v0", size=env_size, max_steps=args['episode_length'] - 4).env
-    env.load_rewards(rewardDictionary)
+    # Gridworld
+    if args['env'] == 'gridworld':
+        env_size   = 10
+        env        = gym.make("gymnasium_env/GridWorld-v0", size=env_size, max_steps=args['episode_length'] - 4).env
+        env.load_rewards(rewardDictionary)
+    # Minigrid
+    elif args['env'] == 'minigrid':
+        env = gym.make("gymnasium_env/minigrid_toy")
+        env.reset()
+        print(env.observation_space)
+        print("Env", env)
+
+    valid_envs = ['minigrid', 'gridworld']
+    assert args['env'] in valid_envs
+
     # Testing val it
     # model      = ValueIteration(args, env_size, rewardDictionary)
     # obs, info  = env.reset()
@@ -121,7 +137,7 @@ if __name__ == '__main__':
     elif args['algo'] == 'dqn': 
         monitored_env = Monitor(env)
         models_tested[args['algo']] = (
-            DQN2("MlpPolicy", monitored_env, verbose=1, target_update_interval = 100, exploration_final_eps = 0.2, device = 'cuda', seed = seed), 
+            DQN2("MlpPolicy", monitored_env, verbose=1, buffer_size = 100000, target_update_interval = 100, exploration_final_eps = 0.2, device = 'cuda', seed = seed), 
             monitored_env)
     elif args['algo'] == 'all':
         for algo, model in algos.items():
@@ -138,9 +154,13 @@ if __name__ == '__main__':
             ##########################################################################################################
             ##########################################################################################################
             # Saving best model
-            env_eval        = gym.make("gymnasium_env/GridWorld-v0", size=env_size, max_steps=args['episode_length'] - 4).env
-            env_eval.load_rewards(rewardDictionary, eval_env = True)
-            monitored_eval_env = Monitor(env_eval)
+            if args['env'] == 'gridworld':
+                env_eval        = gym.make("gymnasium_env/GridWorld-v0", size=env_size, max_steps=args['episode_length'] - 4).env
+                env_eval.load_rewards(rewardDictionary, eval_env = True)
+            elif args['env'] == 'minigrid':
+                env_eval = gym.make("gymnasium_env/minigrid_toy").env
+                monitored_eval_env = Monitor(env_eval)
+
             eval_callback = EvalCallback(monitored_eval_env, best_model_save_path='/root/home/gridworld/models/' + algo + '/', eval_freq=500,
                              deterministic=False, render=False, verbose=1)
             ##########################################################################################################
@@ -158,6 +178,7 @@ if __name__ == '__main__':
             print(len(monitored_env.get_episode_lengths()))
             print(model.replay_buffer.observations)
             model = model.load("/root/home/gridworld/models/" + algo + "/best_model")
+            monitored_env.plot_game_loc_diversity(algo)
             utils.plot_array_and_save(
                 utils.exponential_moving_average(
                     monitored_env.get_episode_rewards()), 

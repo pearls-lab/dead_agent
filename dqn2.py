@@ -15,7 +15,6 @@ from sb3.stable_baselines3.dqn.policies import CnnPolicy, DQNPolicy, MlpPolicy, 
 
 SelfDQN = TypeVar("SelfDQN", bound="DQN2")
 
-
 class DQN2(OffPolicyAlgorithm):
     """
     Deep Q-Network (DQN)
@@ -189,12 +188,13 @@ class DQN2(OffPolicyAlgorithm):
 
         losses = []
         pos = []
-        for obs in self.replay_buffer.observations:
-            if np.sum(obs[0]) == 0:
-                break
-            else:
-                pos.append(np.argwhere(obs[0] == 1))
+        # for obs in self.replay_buffer.observations:
+        #     if np.sum(obs[0]) == 0:
+        #         break
+        #     else:
+        #         pos.append(np.argwhere(obs[0] == 1))
         # print(np.unique(pos, return_counts=True))
+        # print("Replay buffer location:", self.replay_buffer.pos)
         for _ in range(gradient_steps):
             # Sample replay buffer
             replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)  # type: ignore[union-attr]
