@@ -45,8 +45,9 @@ def exponential_moving_average(data, window = 10):
 
 import matplotlib.pyplot as plt
 import numpy as np
+import os 
 
-def plot_array_and_save(array, output_path, title = "title: placeholder", x_label = "x_label: placeholder", y_label = "y_label: placeholder", y_max = 10):
+def plot_array_and_save(array, output_path, title = "title: placeholder", x_label = "x_label: placeholder", y_label = "y_label: placeholder", y_max = 10, only_text = True):
     """ From ChatGPT
     Plots a 1D array and saves it as an image.
 
@@ -60,12 +61,54 @@ def plot_array_and_save(array, output_path, title = "title: placeholder", x_labe
     if array.ndim != 1:
         raise ValueError("Input array must be 1-dimensional.")
 
-    plt.figure()
-    plt.plot(array, marker='o')  # Line plot with markers
-    plt.xlabel(x_label)
-    plt.ylabel(y_label)
-    plt.title(title)
+    if not only_text:
+        plt.figure()
+        plt.plot(array, marker='o')  # Line plot with markers
+        plt.xlabel(x_label)
+        plt.ylabel(y_label)
+        plt.title(title)
 
-    # Save the plot
-    plt.savefig(output_path, bbox_inches='tight', pad_inches=0.1)
-    plt.close()
+        # # Make directory if it doesnt exist
+        # if not os.path.exists(output_path):
+        #     os.makedirs(output_path)
+
+        # Save the plot
+        plt.savefig(output_path, bbox_inches='tight', pad_inches=0.1)
+        plt.close()
+
+    if ".txt" not in array:
+        output_path += ".txt"
+
+    # Save the textfile as well for later manipulation
+    np.savetxt(output_path, array, delimiter=',', fmt='%d')
+
+
+def save_array(array, output_path):
+    # Save the textfile as well for later manipulation
+    if ".txt" not in array:
+        output_path += ".txt"
+    np.savetxt(output_path, array, delimiter=',', fmt='%d')
+
+import random
+import numpy as np
+import torch
+
+def set_seed(seed: int):
+    """
+    More ChatGPT code:
+
+    Set the seed for reproducibility across numpy, torch, and random libraries.
+
+    Args:
+        seed (int): The seed value to be set.
+    """
+    random.seed(seed)  # Python's built-in random module
+    np.random.seed(seed)  # NumPy random module
+    torch.manual_seed(seed)  # PyTorch random number generator for CPU
+    torch.cuda.manual_seed(seed)  # PyTorch random number generator for current GPU
+    torch.cuda.manual_seed_all(seed)  # PyTorch random number generator for all GPUs
+    
+    # Ensures that CUDA uses deterministic algorithms (if applicable)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+

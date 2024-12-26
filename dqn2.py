@@ -3,6 +3,7 @@ from typing import Any, ClassVar, Optional, TypeVar, Union
 
 import numpy as np
 import torch as th
+import utils
 from gymnasium import spaces
 from torch.nn import functional as F
 
@@ -135,7 +136,8 @@ class DQN2(OffPolicyAlgorithm):
         self.max_grad_norm = max_grad_norm
         # "epsilon" for the epsilon-greedy exploration
         self.exploration_rate = 0.0
-
+        self.buffer_logs = []
+        self.all_losses  = []
         if _init_setup_model:
             self._setup_model()
 
@@ -188,17 +190,11 @@ class DQN2(OffPolicyAlgorithm):
 
         losses = []
         pos = []
-        # for obs in self.replay_buffer.observations:
-        #     if np.sum(obs[0]) == 0:
-        #         break
-        #     else:
-        #         pos.append(np.argwhere(obs[0] == 1))
-        # print(np.unique(pos, return_counts=True))
-        # print("Replay buffer location:", self.replay_buffer.pos)
         for _ in range(gradient_steps):
             # Sample replay buffer
             replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)  # type: ignore[union-attr]
-
+            all_locs = th.sum(replay_data.observations.clone().detach(), dim = 0)
+            self.buffer_logs.append(len(th.nonzero(all_locs)))
             with th.no_grad():
                 # Compute the next Q-values using the target network
                 next_q_values = self.q_net_target(replay_data.next_observations)
@@ -228,6 +224,9 @@ class DQN2(OffPolicyAlgorithm):
 
         # Increase update counter
         self._n_updates += gradient_steps
+
+        # Track all losses for graphing
+        self.all_losses += losses
 
         self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
         self.logger.record("train/loss", np.mean(losses))

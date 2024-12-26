@@ -3,3 +3,5 @@
 /dd*
 __pycache__/
 /graphs
+/logs
+/models

@@ -5,6 +5,7 @@ import pandas as pd
 import gymnasium as gym
 import matplotlib.pyplot as plt
 import utils
+from distutils.util import strtobool
 
 
 class GridWorldEnv(gym.Env):
@@ -65,12 +66,11 @@ class GridWorldEnv(gym.Env):
         print("Agent:", self._agent_location)
         print("Target:", self._target_location)
 
-    def plot_game_loc_diversity(self, algo):
-        print(self.last_ten_game_locs)
+    def plot_game_loc_diversity(self, initial_path, algo,  only_text):
         utils.plot_array_and_save(
                     self.last_ten_game_locs, 
-                    "./graphs/" + algo + "_buffer_diversity", title = algo + " buffer div", 
-                    x_label = "episodes", y_label = "uniq locations", y_max = 100)
+                    initial_path + "_buffer_diversity", title = algo + " buffer div", 
+                    x_label = "episodes", y_label = "uniq locations", y_max = 100, only_text = only_text)
 
     def get_grid(self):
         grid                                                     = np.zeros((self.size, self.size))
@@ -257,23 +257,24 @@ class GridWorldEnv(gym.Env):
         terminal               = False
         flat_agent_loc         = self.get_flat_loc(self._agent_location)
 
-        # if 'dying' in self.active_events:
-        #     if self.active_events['dying'] <= 0:
-        #         return -5, True
-        #     else:
-        #         self.active_events['dying'] -= 1
+        if 'dying' in self.active_events:
+            if self.active_events['dying'] <= 0:
+                return -10, True
+            else:
+                self.active_events['dying'] -= 1
 
         if flat_agent_loc not in self.event_locations: return reward_at_current_step, terminal
-
+        
         for key, info in self.masterRewardDict.items():
             for location in info["location"]:
                 if (self._agent_location == location).all(): 
-                    # if key == 'dead_areas': 
-                    #     if 'dying' not in self.active_events.keys(): self.active_events['dying'] = np.random.randint(1, 5)
-                    # else:
-                    reward_at_current_step   += info['reward']
-                    info['available']         = False
-                    if not terminal: terminal = info['terminal'] # terminal event + non terminal event = terminal
+                    if key == 'dead_areas': 
+                        if 'dying' not in self.active_events.keys(): self.active_events['dying'] = 1 # np.random.randint(1, 3)
+                    else:
+                        reward_at_current_step   += info['reward']
+                        info['available']         = False
+                    if not terminal: 
+                        terminal = bool(strtobool(info['terminal'])) # terminal event + non terminal event = terminal
 
         return reward_at_current_step, terminal
 
@@ -296,8 +297,6 @@ class GridWorldEnv(gym.Env):
         observation             = self._get_obs()
         info                    = self._get_info()
         self.all_locs.append(self.get_flat_loc(self._agent_location))
-        # print(len(np.unique(self.all_locs)))
-        # print(len(np.sort(pd.unique(np.array(self.all_locs)))))
         if self.steps > self.max_steps: terminated = True
         return observation, reward, terminated, truncated, info
     
