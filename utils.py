@@ -80,7 +80,7 @@ def plot_array_and_save(array, output_path, title = "title: placeholder", x_labe
         output_path += ".txt"
 
     # Save the textfile as well for later manipulation
-    np.savetxt(output_path, array, delimiter=',', fmt='%d')
+    np.savetxt(output_path, array, delimiter=',')
 
 
 def save_array(array, output_path):
