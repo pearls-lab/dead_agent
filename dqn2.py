@@ -194,7 +194,7 @@ class DQN2(OffPolicyAlgorithm):
             # Sample replay buffer
             replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)  # type: ignore[union-attr]
             all_locs = th.sum(replay_data.observations.clone().detach(), dim = 0)
-            self.buffer_logs.append(len(th.nonzero(all_locs)))
+            self.logger.record("train/buffer update diversity", len(th.nonzero(all_locs)))
             with th.no_grad():
                 # Compute the next Q-values using the target network
                 next_q_values = self.q_net_target(replay_data.next_observations)

@@ -11,10 +11,12 @@ from minigrid_custom import SimpleEnv
 from algos.val_it import ValueIteration
 from sb3.stable_baselines3 import A2C, DQN, PPO
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.callbacks import EvalCallback
+from stable_baselines3.common.callbacks import EvalCallback, CallbackList
 from algos.tdmpc import TDMPC
 from algos.tdmpc_helper import Episode, ReplayBuffer
 from dqn2 import DQN2
+import wandb
+from wandb.integration.sb3 import WandbCallback
 
 def format_save_file(params):
     file_string    = ""
@@ -89,6 +91,11 @@ if __name__ == '__main__':
 
     print("Folder subpath: ", folder_subpath)
 
+    network_arch_str = ""
+    for layer in network_arch:
+        network_arch_str += str(layer) + "_"
+    network_arch_str = network_arch_str[:-1]
+
     # Gridworld
     if args['env'] == 'gridworld':
         env_size   = 10
@@ -121,6 +128,19 @@ if __name__ == '__main__':
         utils.set_seed(seed)
         algos         = {'ppo' : PPO, 'dqn': DQN2, 'val_it': ValueIteration}
         models_tested = {}
+        run = wandb.init(
+            # Set the project where this run will be logged
+            project="dead-agent",
+            # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
+            name=folder_subpath + "run" + str(trial_no),
+            # Track hyperparameters and run metadata
+            config={
+                "policy_type": "MlpPolicy",
+                "architecture": network_arch_str,
+                "dataset": args['env'],
+                "epochs": args['train_steps'],
+            },
+            sync_tensorboard=True)
 
         # Personal preference: Only print verbose if it is the first trial
         if trial_no == 0: verbose = 1
@@ -137,7 +157,9 @@ if __name__ == '__main__':
             monitored_env = Monitor(env)
             policy_kwargs = {"net_arch": network_arch}
             models_tested[args['algo']] = (
-                DQN2("MlpPolicy", monitored_env, verbose=verbose, buffer_size = 100000, target_update_interval = 100, exploration_final_eps = 0.2, device = 'cuda', seed = seed, policy_kwargs=policy_kwargs),  
+                DQN2("MlpPolicy", monitored_env, verbose=verbose, buffer_size = 100000, 
+                     target_update_interval = 100, exploration_final_eps = 0.2, device = 'cuda', 
+                     seed = seed, policy_kwargs=policy_kwargs, tensorboard_log=f"runs/{run.id}"),  
                 monitored_env)
         elif args['algo'] == 'all':
             for algo, model in algos.items():
@@ -170,7 +192,13 @@ if __name__ == '__main__':
                 ##########################################################################################################
                 ##########################################################################################################
                 # Model training
-                model.learn(total_timesteps=args['train_steps'], callback=eval_callback, progress_bar = True)
+                wandb_callback = WandbCallback(
+                                gradient_save_freq=100,
+                                model_save_path=f"models/{run.id}",
+                                verbose=2,
+                            )
+                callback = CallbackList([wandb_callback, eval_callback])
+                model.learn(total_timesteps=args['train_steps'], callback=callback, progress_bar = True)
                 # model.learn(total_timesteps=50000, progress_bar = True)
                 # model.save("gw_test")
                 ##########################################################################################################
@@ -179,7 +207,7 @@ if __name__ == '__main__':
                 print(len(monitored_env.get_episode_lengths()))
                 print(model.all_losses)
                 print(model.buffer_logs)
-                # print(model.replay_buffer.observations)
+
                 model = model.load("/root/home/gridworld/models/" + folder_subpath + algo + "/" "best_model")
 
                 # Path plotting. Recommended not to do this unless unit testing as it takes a long time to plot the graphs: 
@@ -188,19 +216,19 @@ if __name__ == '__main__':
 
                 monitored_env.plot_game_loc_diversity("./graphs/" + folder_subpath + algo + "_run" + str(trial_no), algo, only_text)
 
-                # Losses from training
-                utils.plot_array_and_save(
-                    utils.exponential_moving_average(
-                        model.all_losses), 
-                        "./graphs/" + folder_subpath + algo + "_training_loss" + "_run" + str(trial_no), title = algo + " Loss", 
-                        x_label = "Training step", y_label = "loss", y_max = 10, only_text = only_text)
+                # # Losses from training
+                # utils.plot_array_and_save(
+                #     utils.exponential_moving_average(
+                #         model.all_losses), 
+                #         "./graphs/" + folder_subpath + algo + "_training_loss" + "_run" + str(trial_no), title = algo + " Loss", 
+                #         x_label = "Training step", y_label = "loss", y_max = 10, only_text = only_text)
                 
-                # Unique areas sampled from buffer at each training step
-                utils.plot_array_and_save(
-                    utils.exponential_moving_average(
-                        model.buffer_logs), 
-                        "./graphs/" + folder_subpath + algo + "_training_buffer_diversity" + "_run" + str(trial_no), title = algo + " TBD", 
-                        x_label = "Training step", y_label = "unique areas", y_max = 6, only_text = only_text)
+                # # Unique areas sampled from buffer at each training step
+                # utils.plot_array_and_save(
+                #     utils.exponential_moving_average(
+                #         model.buffer_logs), 
+                #         "./graphs/" + folder_subpath + algo + "_training_buffer_diversity" + "_run" + str(trial_no), title = algo + " TBD", 
+                #         x_label = "Training step", y_label = "unique areas", y_max = 6, only_text = only_text)
 
                 # Rewards from each episode 
                 utils.plot_array_and_save(
@@ -219,7 +247,7 @@ if __name__ == '__main__':
                 print("Saved episode lengths")
 
         print(f'Trial completed for seed: {seed}')
-
+        run.finish()
 
 
         obs, info = env.reset()

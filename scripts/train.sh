@@ -7,11 +7,7 @@ python train.py --algo dqn --env gridworld --layers 2 --parameters 64 --reward_d
 python train.py --algo dqn --env gridworld --layers 3 --parameters 64 --reward_dict ./two_wall.json > ./logs/two_wall/64_64_64.txt
 python train.py --algo dqn --env gridworld --layers 4 --parameters 64 --reward_dict ./two_wall.json > ./logs/two_wall/64_64_64_64.txt
 python train.py --algo dqn --env gridworld --layers 5 --parameters 64 --reward_dict ./two_wall.json > ./logs/two_wall/64_64_64_64_64.txt
-python train.py --algo dqn --env gridworld --layers 6 --parameters 64 --reward_dict ./two_wall.json > ./logs/two_wall/64_64_64_64_64_64.txt
-python train.py --algo dqn --env gridworld --layers 7 --parameters 64 --reward_dict ./two_wall.json > ./logs/two_wall/64_64_64_64_64_64_64.txt
-python train.py --algo dqn --env gridworld --layers 8 --parameters 64 --reward_dict ./two_wall.json > ./logs/two_wall/64_64_64_64_64_64_64_64.txt
-python train.py --algo dqn --env gridworld --layers 9 --parameters 64 --reward_dict ./two_wall.json > ./logs/two_wall/64_64_64_64_64_64_64_64_64.txt
-python train.py --algo dqn --env gridworld --layers 10 --parameters 64 --reward_dict ./two_wall.json > ./logs/two_wall/64_64_64_64_64_64_64_64_64_64.txt
+
 
 echo "64 layers done" 
 
@@ -21,11 +17,7 @@ python train.py --algo dqn --env gridworld --layers 2 --parameters 128 --reward_
 python train.py --algo dqn --env gridworld --layers 3 --parameters 128 --reward_dict ./two_wall.json > ./logs/two_wall/128_128_128.txt
 python train.py --algo dqn --env gridworld --layers 4 --parameters 128 --reward_dict ./two_wall.json > ./logs/two_wall/128_128_128_128.txt
 python train.py --algo dqn --env gridworld --layers 5 --parameters 128 --reward_dict ./two_wall.json > ./logs/two_wall/128_128_128_128_128.txt
-python train.py --algo dqn --env gridworld --layers 6 --parameters 128 --reward_dict ./two_wall.json > ./logs/two_wall/128_128_128_128_128_128.txt
-python train.py --algo dqn --env gridworld --layers 7 --parameters 128 --reward_dict ./two_wall.json > ./logs/two_wall/128_128_128_128_128_128_128.txt
-python train.py --algo dqn --env gridworld --layers 8 --parameters 128 --reward_dict ./two_wall.json > ./logs/two_wall/128_128_128_128_128_128_128_128.txt
-python train.py --algo dqn --env gridworld --layers 9 --parameters 128 --reward_dict ./two_wall.json > ./logs/two_wall/128_128_128_128_128_128_128_128_128.txt
-python train.py --algo dqn --env gridworld --layers 10 --parameters 128 --reward_dict ./two_wall.json > ./logs/two_wall/128_128_128_128_128_128_128_128_128_128.txt
+
 
 echo "128 layers done" 
 
