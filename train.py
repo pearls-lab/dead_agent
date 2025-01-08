@@ -65,8 +65,14 @@ def parse_args():
                         help="file path to reward dict")
     parser.add_argument('--train_steps', default=1000000, type=int,
                         help="steps to train model")
-    parser.add_argument('--trials', default=5, type=int,
+    parser.add_argument('--trials', default=4, type=int,
                         help="number of runs to do")
+    parser.add_argument('--gradient_steps', default=1, type=int,
+                        help="number of gradient steps")
+    parser.add_argument('--script_id', default="default_name", type=str,
+                        help="Script identifier for wandb")
+    parser.add_argument('--death_timer', default=1, type=int,
+                        help="number of steps agent can take before dying after stepping in a dead area.")
     
 
     parser.set_defaults(gat=True)
@@ -99,7 +105,7 @@ if __name__ == '__main__':
     # Gridworld
     if args['env'] == 'gridworld':
         env_size   = 10
-        env        = gym.make("gymnasium_env/GridWorld-v0", size=env_size, max_steps=args['episode_length'] - 4).env
+        env        = gym.make("gymnasium_env/GridWorld-v0", args = args, size=env_size).env
         env.load_rewards(rewardDictionary)
     # Minigrid
     elif args['env'] == 'minigrid':
@@ -132,13 +138,18 @@ if __name__ == '__main__':
             # Set the project where this run will be logged
             project="dead-agent",
             # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-            name=folder_subpath + "run" + str(trial_no),
+            name=folder_subpath + "grad_steps" + str(args['gradient_steps']) + "run" + str(trial_no),
             # Track hyperparameters and run metadata
             config={
                 "policy_type": "MlpPolicy",
                 "architecture": network_arch_str,
-                "dataset": args['env'],
+                "env": args['env'],
                 "epochs": args['train_steps'],
+                "grad_steps": args['gradient_steps'],
+                "death_timer": args['death_timer'],
+                "algo": args['algo'],
+                "reward_dict": args['reward_dict'],
+                "script_id": args['script_id']
             },
             sync_tensorboard=True)
 
@@ -157,7 +168,7 @@ if __name__ == '__main__':
             monitored_env = Monitor(env)
             policy_kwargs = {"net_arch": network_arch}
             models_tested[args['algo']] = (
-                DQN2("MlpPolicy", monitored_env, verbose=verbose, buffer_size = 100000, 
+                DQN2("MlpPolicy", monitored_env, verbose=verbose, buffer_size = 100000, gradient_steps = args['gradient_steps'],
                      target_update_interval = 100, exploration_final_eps = 0.2, device = 'cuda', 
                      seed = seed, policy_kwargs=policy_kwargs, tensorboard_log=f"runs/{run.id}"),  
                 monitored_env)
@@ -178,14 +189,14 @@ if __name__ == '__main__':
                 ##########################################################################################################
                 # Saving best model
                 if args['env'] == 'gridworld':
-                    env_eval        = gym.make("gymnasium_env/GridWorld-v0", size=env_size, max_steps=args['episode_length'] - 4).env
+                    env_eval        = gym.make("gymnasium_env/GridWorld-v0", args = args, size=env_size).env
                     env_eval.load_rewards(rewardDictionary, eval_env = True)
                 elif args['env'] == 'minigrid':
                     env_eval = gym.make("gymnasium_env/minigrid_toy").env
 
                 monitored_eval_env = Monitor(env_eval)
-                eval_callback = EvalCallback(monitored_eval_env, best_model_save_path='/root/home/gridworld/models/' + folder_subpath + algo + '/', eval_freq=500,
-                                deterministic=False, render=False, verbose=1)
+                eval_callback = EvalCallback(monitored_eval_env, best_model_save_path='/root/home/gridworld/models/' + folder_subpath + algo + '/', eval_freq=100000,
+                                deterministic=False, render=False, verbose=0)
                 ##########################################################################################################
                 ##########################################################################################################
 
@@ -193,28 +204,26 @@ if __name__ == '__main__':
                 ##########################################################################################################
                 # Model training
                 wandb_callback = WandbCallback(
-                                gradient_save_freq=100,
+                                gradient_save_freq=100000,
                                 model_save_path=f"models/{run.id}",
-                                verbose=2,
+                                verbose=0,
                             )
                 callback = CallbackList([wandb_callback, eval_callback])
-                model.learn(total_timesteps=args['train_steps'], callback=callback, progress_bar = True)
+                model.learn(total_timesteps=args['train_steps'], callback=callback, progress_bar = False)
                 # model.learn(total_timesteps=50000, progress_bar = True)
                 # model.save("gw_test")
                 ##########################################################################################################
                 ##########################################################################################################
                 print(len(monitored_env.get_episode_rewards()))
                 print(len(monitored_env.get_episode_lengths()))
-                print(model.all_losses)
-                print(model.buffer_logs)
 
                 model = model.load("/root/home/gridworld/models/" + folder_subpath + algo + "/" "best_model")
 
                 # Path plotting. Recommended not to do this unless unit testing as it takes a long time to plot the graphs: 
-                only_text = True
-                if args['plot_graphs']: only_text = False
+                # only_text = True
+                # if args['plot_graphs']: only_text = False
 
-                monitored_env.plot_game_loc_diversity("./graphs/" + folder_subpath + algo + "_run" + str(trial_no), algo, only_text)
+                # monitored_env.plot_game_loc_diversity("./graphs/" + folder_subpath + algo + "_run" + str(trial_no), algo, only_text)
 
                 # # Losses from training
                 # utils.plot_array_and_save(
@@ -231,23 +240,24 @@ if __name__ == '__main__':
                 #         x_label = "Training step", y_label = "unique areas", y_max = 6, only_text = only_text)
 
                 # Rewards from each episode 
-                utils.plot_array_and_save(
-                    utils.exponential_moving_average(
-                        monitored_env.get_episode_rewards()), 
-                        "./graphs/" + folder_subpath + algo + "_episode_rewards" + "_run" + str(trial_no), title = algo + " Episode Rewards", 
-                        x_label = "episodes", y_label = "rewards", y_max = 6, only_text = only_text)
-                print("Saved episode rewards")
+                # utils.plot_array_and_save(
+                #     utils.exponential_moving_average(
+                #         monitored_env.get_episode_rewards()), 
+                #         "./graphs/" + folder_subpath + algo + "_episode_rewards" + "_run" + str(trial_no), title = algo + " Episode Rewards", 
+                #         x_label = "episodes", y_label = "rewards", y_max = 6, only_text = only_text)
+                # print("Saved episode rewards")
 
-                # Length of each episode
-                utils.plot_array_and_save(
-                    utils.exponential_moving_average(
-                        monitored_env.get_episode_lengths()), 
-                        "./graphs/" + folder_subpath + algo + "_episode_lengths" + "_run" + str(trial_no), title = algo + " Episode Steps", 
-                        x_label = "episodes", y_label = "total steps", y_max = max(monitored_env.get_episode_lengths()) + 5, only_text = only_text)
-                print("Saved episode lengths")
+                # # Length of each episode
+                # utils.plot_array_and_save(
+                #     utils.exponential_moving_average(
+                #         monitored_env.get_episode_lengths()), 
+                #         "./graphs/" + folder_subpath + algo + "_episode_lengths" + "_run" + str(trial_no), title = algo + " Episode Steps", 
+                #         x_label = "episodes", y_label = "total steps", y_max = max(monitored_env.get_episode_lengths()) + 5, only_text = only_text)
+                # print("Saved episode lengths")
 
         print(f'Trial completed for seed: {seed}')
         run.finish()
+        # monitored_env.save_trajectories()
 
 
         obs, info = env.reset()
@@ -267,8 +277,8 @@ if __name__ == '__main__':
                 break
         print(f"Completed in {steps} steps with score of {reward}")
         # with open("graphs/" + algo + "_path.txt", "w") as text_file: text_file.write(env.print_path(path, return_string = True))
-        env.print_path(path)
-        env.print_path_image(path,'./graphs/' + folder_subpath + algo + "path.png", algo + " path")
+        # env.print_path(path)
+        # env.print_path_image(path,'./graphs/' + folder_subpath + algo + "path.png", algo + " path")
     end_time = time.time()
     execution_time = end_time - start_time
     print(f"Execution time: {execution_time} seconds")

@@ -1,0 +1,1 @@
+python train.py --algo dqn --env gridworld --layers 2 --parameters 2048 --gradient_steps 4 --reward_dict ./two_wall.json > ./logs/two_wall/algo_dqn_layers_2_parameters_2048_grad_steps_4.txt

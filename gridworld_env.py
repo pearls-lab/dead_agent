@@ -6,12 +6,14 @@ import gymnasium as gym
 import matplotlib.pyplot as plt
 import utils
 from distutils.util import strtobool
+import pickle
 
 
 class GridWorldEnv(gym.Env):
 
-    def __init__(self, size: int = 5, max_steps: int = 100):
-        # The size of the square grid
+    def __init__(self, args, size: int = 5):
+        self.args                 = args
+        # The size of the square grid. Prob need to switch this to just pull from the arguments
         self.size                 = size
 
         # Define the agent and target location; randomly chosen in `reset` and updated in `step`
@@ -44,7 +46,7 @@ class GridWorldEnv(gym.Env):
         self.full_obs             = True
         self.event_locations      = []
         self.min_dist             = 5
-        self.max_steps            = max_steps
+        self.max_steps            = args['max_env_steps']
         self.locIdenDict          = []
         self.eval_env             = False
         self.allIdentifiers       = [self._agent_identifier, self._goal_identifier]
@@ -60,6 +62,8 @@ class GridWorldEnv(gym.Env):
         self.all_locs              = []
         self.game_locs             = []
         self.last_ten_game_locs    = []
+        self.all_traj              = []
+        self.current_traj          = []
         
 
     def print_target_agent(self):
@@ -269,7 +273,9 @@ class GridWorldEnv(gym.Env):
             for location in info["location"]:
                 if (self._agent_location == location).all(): 
                     if key == 'dead_areas': 
-                        if 'dying' not in self.active_events.keys(): self.active_events['dying'] = 1 # np.random.randint(1, 3)
+                        if 'dying' not in self.active_events.keys():
+                            if self.args['death_timer'] > 0: self.active_events['dying'] = self.args['death_timer']
+                            else:                            self.active_events['dying'] = np.random.randint(1, (self.args['death_timer'] * -1) + 1)
                     else:
                         reward_at_current_step   += info['reward']
                         info['available']         = False
@@ -288,8 +294,7 @@ class GridWorldEnv(gym.Env):
                 self._agent_location + direction, 0, self.size - 1
             )
             
-        else: reward -= 1
-
+        else: reward -= 1  
         self.steps             += 1
         step_reward, terminated = self.handle_events()
         reward                 += step_reward
@@ -298,7 +303,13 @@ class GridWorldEnv(gym.Env):
         info                    = self._get_info()
         self.all_locs.append(self.get_flat_loc(self._agent_location))
         if self.steps > self.max_steps: terminated = True
+        self.cumulative_reward += reward
         return observation, reward, terminated, truncated, info
+    
+    def save_trajectories(self):
+        with open('traj.pkl', 'wb') as f:
+            pickle.dump(self.all_traj, f)
+
     
 gym.register(
     id="gymnasium_env/GridWorld-v0",

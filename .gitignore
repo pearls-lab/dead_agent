@@ -7,3 +7,6 @@ __pycache__/
 /models
 /wandb
 /runs
+/gen_data.txt
+/traj1.pkl
+*.txt

@@ -6,6 +6,7 @@ from minigrid.core.mission import MissionSpace
 from minigrid.core.world_object import Door, Goal, Key, Wall
 from minigrid.manual_control import ManualControl
 from minigrid.minigrid_env import MiniGridEnv
+from gymnasium.core import ActType, ObsType
 from gymnasium import spaces
 import gymnasium as gym
 
@@ -80,6 +81,46 @@ class SimpleEnv(MiniGridEnv):
             self.place_agent()
 
         self.mission = "grand mission"
+
+    def reset(
+        self,
+        *,
+        seed: int | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> tuple[ObsType, dict[str, Any]]:
+        super().reset(seed=seed)
+
+        # Reinitialize episode-specific variables
+        self.agent_pos = (-1, -1)
+        self.agent_dir = -1
+
+        # Generate a new random grid at the start of each episode
+        self._gen_grid(self.width, self.height)
+
+        # These fields should be defined by _gen_grid
+        assert (
+            self.agent_pos >= (0, 0)
+            if isinstance(self.agent_pos, tuple)
+            else all(self.agent_pos >= 0) and self.agent_dir >= 0
+        )
+
+        # Check that the agent doesn't overlap with an object
+        start_cell = self.grid.get(*self.agent_pos)
+        assert start_cell is None or start_cell.can_overlap()
+
+        # Item picked up, being carried, initially nothing
+        self.carrying = None
+
+        # Step count since episode start
+        self.step_count = 0
+
+        if self.render_mode == "human":
+            self.render()
+
+        # Return first observation
+        obs = self.gen_obs()
+
+        return obs, self.mission, {}
 
 
 

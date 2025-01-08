@@ -1,1 +1,1 @@
-python train.py --algo dqn --env gridworld --layers 2 --train_steps 10000 --parameters 64 --reward_dict ./two_wall.json > testing_trials2.txt
+python train.py --algo dqn --env gridworld --layers 2 --train_steps 10000 --parameters 64 --trials 1 --script_id "test run" --death_timer 4 --reward_dict ./two_wall.json > testing_trials2.txt
