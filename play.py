@@ -14,7 +14,7 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import EvalCallback
 from algos.tdmpc import TDMPC
 from algos.tdmpc_helper import Episode, ReplayBuffer
-from dqn2 import DQN2
+from home.gridworld.modified_algos.dqn2 import DQN2
 
 def format_save_file(params):
     file_string    = ""

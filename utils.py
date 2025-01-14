@@ -112,3 +112,13 @@ def set_seed(seed: int):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+def display_environment(env, x, y, title = "title placeholder") -> None:
+    '''
+    Converts an environment to an image and displays it on the notebook.
+    '''
+    img = env.render()
+    plt.figure(figsize=(x,y))
+    plt.imshow(img)
+    plt.title(title)
+    plt.show()
+

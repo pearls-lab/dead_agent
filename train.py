@@ -8,15 +8,18 @@ import time
 import utils
 from gridworld_env import GridWorldEnv
 from minigrid_custom import SimpleEnv
+from minigrid_utils.feature_extractor import MinigridFeaturesExtractor
 from algos.val_it import ValueIteration
 from sb3.stable_baselines3 import A2C, DQN, PPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import EvalCallback, CallbackList
 from algos.tdmpc import TDMPC
 from algos.tdmpc_helper import Episode, ReplayBuffer
-from dqn2 import DQN2
+from modified_algos.dqn2 import DQN2
 import wandb
 from wandb.integration.sb3 import WandbCallback
+from minigrid.wrappers import RGBImgPartialObsWrapper, ImgObsWrapper
+import matplotlib as plt
 
 def format_save_file(params):
     file_string    = ""
@@ -69,6 +72,14 @@ def parse_args():
                         help="number of runs to do")
     parser.add_argument('--gradient_steps', default=1, type=int,
                         help="number of gradient steps")
+    parser.add_argument('--lr', default=0.001, type=float,
+                        help="default learning rate")
+    parser.add_argument('--buffer_size', default=100000, type=int,
+                        help="buffer size")
+    parser.add_argument('--multi_buffer', default=False, type=bool,
+                        help="Experimental: Add a second buffer for specfic trajectories")
+    parser.add_argument('--teacher_force', default=False, type=bool,
+                        help="gridworld only rn: will cause the agent to use the most optimal trajectory found")
     parser.add_argument('--script_id', default="default_name", type=str,
                         help="Script identifier for wandb")
     parser.add_argument('--death_timer', default=1, type=int,
@@ -83,13 +94,22 @@ def parse_args():
 if __name__ == '__main__':
     args             = parse_args()
 
+    valid_envs       = ['minigrid', 'gridworld']
+    assert args['env'] in valid_envs
     # Load reward dictionary for environment
-    rewardDictionary = {}
-    with open(args['reward_dict'], 'r') as file: rewardDictionary = json.load(file)
-    assert len(rewardDictionary) > 1, "Environment must contain at least 1 reward" 
+    try:
+        rewardDictionary = {}
+        with open(args['reward_dict'], 'r') as file: rewardDictionary = json.load(file)
+        assert len(rewardDictionary) > 1, "Environment must contain at least 1 reward" 
+    except:
+        print("Reward dictionary not loaded. Will be a basic grid-box environment")
 
     network_arch = []
-    folder_subpath = args['reward_dict'].replace(".json", "/")
+    folder_subpath = "./logs/"
+    if args['env'] == 'gridworld':
+        folder_subpath += 'gridworld/' + args['reward_dict'].replace(".json", "/")
+    if args['env'] == 'minigrid':
+        folder_subpath += "minigrid/"
     for layer in range(args['layers'] + 1):
         network_arch.append(args['parameters'])
         folder_subpath += str(args['parameters']) + "_"       
@@ -97,34 +117,53 @@ if __name__ == '__main__':
 
     print("Folder subpath: ", folder_subpath)
 
+    base_path = folder_subpath
+    if not os.path.exists(base_path):
+        os.makedirs(base_path)
+        print("Making directory: ", base_path)
+
     network_arch_str = ""
     for layer in network_arch:
         network_arch_str += str(layer) + "_"
     network_arch_str = network_arch_str[:-1]
 
+    policy_kwargs = {"net_arch": network_arch}
     # Gridworld
     if args['env'] == 'gridworld':
+        input_pol  = "MlpPolicy"
         env_size   = 10
         env        = gym.make("gymnasium_env/GridWorld-v0", args = args, size=env_size).env
         env.load_rewards(rewardDictionary)
+        env_eval        = gym.make("gymnasium_env/GridWorld-v0", args = args, size=env_size).env
+        env_eval.load_rewards(rewardDictionary, eval_env = True)
     # Minigrid
     elif args['env'] == 'minigrid':
-        env = gym.make("gymnasium_env/minigrid_toy")
-        env.reset()
+        policy_kwargs["features_extractor_class"]  = MinigridFeaturesExtractor
+        policy_kwargs["features_extractor_kwargs"] = dict(features_dim=128)
+        
+        input_pol       = "CnnPolicy"
+        env_size        = 10
+        env             = gym.make("gymnasium_env/minigrid_toy", size = env_size)
+        env_eval        = gym.make("gymnasium_env/minigrid_toy", size = env_size)
+        print(env.observation_space)
+        # Credit: https://github.com/DLR-RM/stable-baselines3/issues/689
+        env             = ImgObsWrapper(env)  # Get rid of the 'mission' field
+        reset_vars      = env.reset()
+
+        img = env.get_frame()
+        plt.pyplot.imshow(img)
+        plt.pyplot.savefig(folder_subpath + "visualization", bbox_inches='tight', pad_inches=0)
+        print(f"Minigrid Layout image saved to {folder_subpath}")
+
+        env_eval        = ImgObsWrapper(env_eval)
+        reset_vars      = env_eval.reset()
         print(env.observation_space)
         print("Env", env)
 
-    valid_envs = ['minigrid', 'gridworld']
-    assert args['env'] in valid_envs
-
+    monitored_env      = Monitor(env)
+    monitored_eval_env = Monitor(env_eval)
 
     start_time    = time.time()
-    base_path = "/root/home/gridworld/graphs/" + folder_subpath + args['algo'] + "/"
-    if not os.path.exists(base_path):
-        os.makedirs(base_path)
-        print("Making directory: ", base_path)
-
-    print(base_path)
     # policy_kwargs = dict(net_arch=dict(pi=[32, 32], vf=[32, 32]))
 
     seeds = [1, 2, 3, 4, 5]
@@ -138,7 +177,7 @@ if __name__ == '__main__':
             # Set the project where this run will be logged
             project="dead-agent",
             # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-            name=folder_subpath + "grad_steps" + str(args['gradient_steps']) + "run" + str(trial_no),
+            name=folder_subpath + args['script_id'],
             # Track hyperparameters and run metadata
             config={
                 "policy_type": "MlpPolicy",
@@ -149,7 +188,11 @@ if __name__ == '__main__':
                 "death_timer": args['death_timer'],
                 "algo": args['algo'],
                 "reward_dict": args['reward_dict'],
-                "script_id": args['script_id']
+                "script_id": args['script_id'],
+                "lr": args['lr'],
+                "buffer_size": args['buffer_size'],
+                'gamma': args['gamma'],
+                "multi_buffer": args['multi_buffer']
             },
             sync_tensorboard=True)
 
@@ -161,16 +204,23 @@ if __name__ == '__main__':
             models_tested[args['algo']] = ValueIteration(args, env_size, rewardDictionary)
         elif args['algo']   == 'ppo': 
             monitored_env = Monitor(env)
+            # models_tested[args['algo']] = (
+            #     PPO("MlpPolicy", monitored_env, verbose=verbose, ent_coef = .9, device = 'cuda', seed = seed),
+            #     monitored_env)
             models_tested[args['algo']] = (
-                PPO("MlpPolicy", monitored_env, verbose=verbose, ent_coef = .9, device = 'cuda', seed = seed),
+                PPO("MlpPolicy", monitored_env, verbose=verbose, n_steps = 128, batch_size= 64, gae_lambda= 0.95, gamma = .99, n_epochs = 10, ent_coef = .0, learning_rate = 2.5e-4, clip_range = 0.2 , device = 'cuda', seed = seed),
                 monitored_env)
         elif args['algo'] == 'dqn': 
-            monitored_env = Monitor(env)
-            policy_kwargs = {"net_arch": network_arch}
             models_tested[args['algo']] = (
-                DQN2("MlpPolicy", monitored_env, verbose=verbose, buffer_size = 100000, gradient_steps = args['gradient_steps'],
-                     target_update_interval = 100, exploration_final_eps = 0.2, device = 'cuda', 
-                     seed = seed, policy_kwargs=policy_kwargs, tensorboard_log=f"runs/{run.id}"),  
+                DQN2(input_pol, monitored_env, verbose=verbose, 
+                     buffer_size            = args['buffer_size'], 
+                     gradient_steps         = args['gradient_steps'], 
+                     learning_rate          = args['lr'],
+                     gamma                  = args['gamma'],
+                     multi_buffer           = args['multi_buffer'],
+                     target_update_interval = 100, 
+                     exploration_final_eps  = 0.2, 
+                     device = 'cuda', seed = seed, policy_kwargs=policy_kwargs, tensorboard_log=f"runs/{run.id}"),  
                 monitored_env)
         elif args['algo'] == 'all':
             for algo, model in algos.items():
@@ -187,15 +237,7 @@ if __name__ == '__main__':
                 print("Model size:", model.policy)
                 ##########################################################################################################
                 ##########################################################################################################
-                # Saving best model
-                if args['env'] == 'gridworld':
-                    env_eval        = gym.make("gymnasium_env/GridWorld-v0", args = args, size=env_size).env
-                    env_eval.load_rewards(rewardDictionary, eval_env = True)
-                elif args['env'] == 'minigrid':
-                    env_eval = gym.make("gymnasium_env/minigrid_toy").env
-
-                monitored_eval_env = Monitor(env_eval)
-                eval_callback = EvalCallback(monitored_eval_env, best_model_save_path='/root/home/gridworld/models/' + folder_subpath + algo + '/', eval_freq=100000,
+                eval_callback = EvalCallback(monitored_eval_env, best_model_save_path='/root/home/' + args['env'] + '/models/' + folder_subpath + algo + '/', eval_freq=int(args['train_steps']/1000),
                                 deterministic=False, render=False, verbose=0)
                 ##########################################################################################################
                 ##########################################################################################################
@@ -217,65 +259,29 @@ if __name__ == '__main__':
                 print(len(monitored_env.get_episode_rewards()))
                 print(len(monitored_env.get_episode_lengths()))
 
-                model = model.load("/root/home/gridworld/models/" + folder_subpath + algo + "/" "best_model")
-
-                # Path plotting. Recommended not to do this unless unit testing as it takes a long time to plot the graphs: 
-                # only_text = True
-                # if args['plot_graphs']: only_text = False
-
-                # monitored_env.plot_game_loc_diversity("./graphs/" + folder_subpath + algo + "_run" + str(trial_no), algo, only_text)
-
-                # # Losses from training
-                # utils.plot_array_and_save(
-                #     utils.exponential_moving_average(
-                #         model.all_losses), 
-                #         "./graphs/" + folder_subpath + algo + "_training_loss" + "_run" + str(trial_no), title = algo + " Loss", 
-                #         x_label = "Training step", y_label = "loss", y_max = 10, only_text = only_text)
-                
-                # # Unique areas sampled from buffer at each training step
-                # utils.plot_array_and_save(
-                #     utils.exponential_moving_average(
-                #         model.buffer_logs), 
-                #         "./graphs/" + folder_subpath + algo + "_training_buffer_diversity" + "_run" + str(trial_no), title = algo + " TBD", 
-                #         x_label = "Training step", y_label = "unique areas", y_max = 6, only_text = only_text)
-
-                # Rewards from each episode 
-                # utils.plot_array_and_save(
-                #     utils.exponential_moving_average(
-                #         monitored_env.get_episode_rewards()), 
-                #         "./graphs/" + folder_subpath + algo + "_episode_rewards" + "_run" + str(trial_no), title = algo + " Episode Rewards", 
-                #         x_label = "episodes", y_label = "rewards", y_max = 6, only_text = only_text)
-                # print("Saved episode rewards")
-
-                # # Length of each episode
-                # utils.plot_array_and_save(
-                #     utils.exponential_moving_average(
-                #         monitored_env.get_episode_lengths()), 
-                #         "./graphs/" + folder_subpath + algo + "_episode_lengths" + "_run" + str(trial_no), title = algo + " Episode Steps", 
-                #         x_label = "episodes", y_label = "total steps", y_max = max(monitored_env.get_episode_lengths()) + 5, only_text = only_text)
-                # print("Saved episode lengths")
+                model = model.load("/root/home/" + args['env'] + "/models/" + folder_subpath + algo + "/" "best_model")
 
         print(f'Trial completed for seed: {seed}')
         run.finish()
         # monitored_env.save_trajectories()
 
 
-        obs, info = env.reset()
-        env.print_target_agent()
-        done = False
-        steps = 0
-        path = []
-        for i in range(100):
-            action, _state = model.predict(obs, deterministic=False)
-            obs, reward, done, truncated, info = env.step(action)
-            print("Action:", action)
-            print("location:", env.get_agent_loc())
-            path.append(env.get_agent_loc(True))
-            # env.render()
-            if done:
-                steps = i
-                break
-        print(f"Completed in {steps} steps with score of {reward}")
+        # obs, info = env.reset()
+        # env.print_target_agent()
+        # done = False
+        # steps = 0
+        # path = []
+        # for i in range(100):
+        #     action, _state = model.predict(obs, deterministic=False)
+        #     obs, reward, done, truncated, info = env.step(action)
+        #     print("Action:", action)
+        #     print("location:", env.get_agent_loc())
+        #     path.append(env.get_agent_loc(True))
+        #     # env.render()
+        #     if done:
+        #         steps = i
+        #         break
+        # print(f"Completed in {steps} steps with score of {reward}")
         # with open("graphs/" + algo + "_path.txt", "w") as text_file: text_file.write(env.print_path(path, return_string = True))
         # env.print_path(path)
         # env.print_path_image(path,'./graphs/' + folder_subpath + algo + "path.png", algo + " path")

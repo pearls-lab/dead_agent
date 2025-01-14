@@ -1,0 +1,1 @@
+python train.py --algo dqn --env gridworld --layers 2 --parameters 512 --gradient_steps 6 --script_id "learning_rate" --reward_dict ./two_wall.json > ./logs/two_wall/algo_dqn_lr_1e-06.txt

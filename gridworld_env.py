@@ -64,6 +64,11 @@ class GridWorldEnv(gym.Env):
         self.last_ten_game_locs    = []
         self.all_traj              = []
         self.current_traj          = []
+        self.current_acts          = []
+        self.subob_traj            = []
+        self.total_resets          = 0
+        self.use_teacher_forcing   = args['teacher_force']
+        self.use_walkthrough       = False
         
 
     def print_target_agent(self):
@@ -228,6 +233,25 @@ class GridWorldEnv(gym.Env):
         super().reset(seed=seed)
         # print(self.masterRewardDict)
         # Reset Internal Metrics
+
+        # Calling it teacher-forcing but prob need a better name for this
+        if self.use_teacher_forcing:
+            # If the agent is not currently using the walkthrough, passively check for if a better trajectory is generated
+            if not self.use_walkthrough:
+                if self.cumulative_reward > 0:
+                    # If the suboptimal trajectory has not been initialized, just take the first one that returns a reward. Otherwise, use length as heuristic
+                    if len(self.subob_traj) < 1 or (len(self.subob_traj) > len(self.current_acts)):
+                        self.subob_traj = self.current_acts.copy()
+
+                # Every 100 non-walkthrough games, use the most optimal trajectory found once
+                non_walkthrough_games = 100        
+                self.total_resets += 1
+                if self.total_resets % non_walkthrough_games == 0:
+                    self.use_walkthrough = True
+            else:
+                self.use_walkthrough = False
+
+        self.current_acts      = []
         self.steps             = 0
         self.cumulative_reward = 0
         self.tempRewardDict    = self.masterRewardDict.copy()
@@ -253,6 +277,8 @@ class GridWorldEnv(gym.Env):
         self.game_locs.append(self.all_locs)
         self.all_locs = [0]
         # print("Total locations: ", len(self.all_locs))
+        self.all_traj.append(self.current_traj.copy())
+        self.current_traj = [observation]
         return observation, info
     
     def handle_events(self):
@@ -285,6 +311,8 @@ class GridWorldEnv(gym.Env):
         return reward_at_current_step, terminal
 
     def step(self, action):
+        if self.use_walkthrough and len(self.subob_traj) > 0: # This should always be false with no teacher forcing
+            action = self.subob_traj[self.steps]
         reward = 0
         # We use `np.clip` to make sure we don't leave the grid bounds
         if action >= 0 and action < 5:
@@ -295,6 +323,7 @@ class GridWorldEnv(gym.Env):
             )
             
         else: reward -= 1  
+        self.current_acts.append(action)
         self.steps             += 1
         step_reward, terminated = self.handle_events()
         reward                 += step_reward
@@ -304,6 +333,8 @@ class GridWorldEnv(gym.Env):
         self.all_locs.append(self.get_flat_loc(self._agent_location))
         if self.steps > self.max_steps: terminated = True
         self.cumulative_reward += reward
+        self.current_traj.append(observation)
+        assert len(self.current_traj) == self.steps + 1
         return observation, reward, terminated, truncated, info
     
     def save_trajectories(self):

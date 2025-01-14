@@ -8,11 +8,15 @@ from gymnasium import spaces
 from torch.nn import functional as F
 
 from sb3.stable_baselines3.common.buffers import ReplayBuffer
-from sb3.stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
+# from sb3.stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
+from modified_algos.OffPolicyAlgo_mod import OffPolicyAlgorithm
 from sb3.stable_baselines3.common.policies import BasePolicy
 from sb3.stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from sb3.stable_baselines3.common.utils import get_linear_fn, get_parameters_by_name, polyak_update
 from sb3.stable_baselines3.dqn.policies import CnnPolicy, DQNPolicy, MlpPolicy, MultiInputPolicy, QNetwork
+from stable_baselines3.common.base_class import BaseAlgorithm
+from stable_baselines3.common.buffers import DictReplayBuffer, ReplayBuffer
+from stable_baselines3.common.callbacks import BaseCallback
 
 SelfDQN = TypeVar("SelfDQN", bound="DQN2")
 
@@ -97,6 +101,7 @@ class DQN2(OffPolicyAlgorithm):
         tensorboard_log: Optional[str] = None,
         policy_kwargs: Optional[dict[str, Any]] = None,
         verbose: int = 0,
+        multi_buffer: bool = False,
         seed: Optional[int] = None,
         device: Union[th.device, str] = "auto",
         _init_setup_model: bool = True,
@@ -138,6 +143,8 @@ class DQN2(OffPolicyAlgorithm):
         self.exploration_rate = 0.0
         self.buffer_logs = []
         self.all_losses  = []
+        self.multi_buffer = multi_buffer
+        print(self.buffer_size)
         if _init_setup_model:
             self._setup_model()
 
@@ -190,11 +197,21 @@ class DQN2(OffPolicyAlgorithm):
 
         losses = []
         pos = []
-        for _ in range(gradient_steps):
+        for step in range(gradient_steps):
             # Sample replay buffer
-            replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)  # type: ignore[union-attr]
-            all_locs = th.sum(replay_data.observations.clone().detach(), dim = 0)
-            self.logger.record("train/buffer update diversity", len(th.nonzero(all_locs)))
+            if self.multi_buffer:
+                if step > int(gradient_steps/2):
+                    # If the auxilary buffer has any samples, sample from it. Otherwise, just sample from the regular buffer
+                    if self.aux_replay_buffer.pos != 0 or self.aux_replay_buffer.full:
+                        replay_data = self.aux_replay_buffer.sample(batch_size, env=self._vec_normalize_env)  # type: ignore[union-attr]
+                    else:
+                        replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
+                else:
+                    replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
+            else:
+                replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
+            # all_locs = th.sum(replay_data.observations.clone().detach(), dim = 0)
+            # self.logger.record("train/buffer update diversity", len(th.nonzero(all_locs)))
             with th.no_grad():
                 # Compute the next Q-values using the target network
                 next_q_values = self.q_net_target(replay_data.next_observations)
@@ -230,6 +247,8 @@ class DQN2(OffPolicyAlgorithm):
 
         self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
         self.logger.record("train/loss", np.mean(losses))
+
+
 
     def predict(
         self,
