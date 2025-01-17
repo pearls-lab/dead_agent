@@ -9,7 +9,7 @@ from torch.nn import functional as F
 
 from sb3.stable_baselines3.common.buffers import ReplayBuffer
 # from sb3.stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
-from modified_algos.OffPolicyAlgo_mod import OffPolicyAlgorithm
+from modified_algos.safe_dqn.SafeOffPolicyAlgo import OffPolicyAlgorithm
 from sb3.stable_baselines3.common.policies import BasePolicy
 from sb3.stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from sb3.stable_baselines3.common.utils import get_linear_fn, get_parameters_by_name, polyak_update
@@ -76,6 +76,7 @@ class DQN2(OffPolicyAlgorithm):
     q_net: QNetwork
     q_net_target: QNetwork
     policy: DQNPolicy
+    safe_policy: QNetwork
 
     def __init__(
         self,
@@ -174,8 +175,9 @@ class DQN2(OffPolicyAlgorithm):
                 )
 
     def _create_aliases(self) -> None:
-        self.q_net = self.policy.q_net
+        self.q_net        = self.policy.q_net
         self.q_net_target = self.policy.q_net_target
+        self.safe_policy  = self.policy.make_q_net()
 
     def _on_step(self) -> None:
         """
@@ -199,34 +201,23 @@ class DQN2(OffPolicyAlgorithm):
         # Update learning rate according to schedule
         self._update_learning_rate(self.policy.optimizer)
 
+        ####################################################
+        ####################################################
+        ### Actual training ################################
+        ####################################################
+        ####################################################
         losses = []
         pos = []
         for step in range(gradient_steps):
             # Sample replay buffer
-            if self.multi_buffer:
-                if step > int(gradient_steps/2):
-                    # If the auxilary buffer has any samples, sample from it. Otherwise, just sample from the regular buffer
-                    if self.aux_replay_buffer.pos != 0 or self.aux_replay_buffer.full:
-                        replay_data = self.aux_replay_buffer.sample(batch_size, env=self._vec_normalize_env)  # type: ignore[union-attr]
-                    else:
-                        replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
-                else:
-                    replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
-            else:
-                replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
-            # all_locs = th.sum(replay_data.observations.clone().detach(), dim = 0)
-            # self.logger.record("train/buffer update diversity", len(th.nonzero(all_locs)))
+            replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
+
+                
             with th.no_grad():
                 # Compute the next Q-values using the target network
                 next_q_values = self.q_net_target(replay_data.next_observations)
-                if self.args['double_dqn'] == True:
-                    # use current model to select the action with maximal q value
-                    max_actions = th.argmax(self.q_net(replay_data.next_observations), dim=1)
-                    # evaluate q value of that action using fixed target network
-                    next_q_values = th.gather(next_q_values, dim=1, index=max_actions.unsqueeze(-1))
-                else:
-                    # Follow greedy policy: use the one with the highest value
-                    next_q_values, _ = next_q_values.max(dim=1)
+                # Follow greedy policy: use the one with the highest value
+                next_q_values, _ = next_q_values.max(dim=1)
                 # Avoid potential broadcast issue
                 next_q_values = next_q_values.reshape(-1, 1)
                 # 1-step TD target
@@ -257,6 +248,66 @@ class DQN2(OffPolicyAlgorithm):
 
         self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
         self.logger.record("train/loss", np.mean(losses))
+
+        ####################################################
+        ####################################################
+        ### Actual training ################################
+        ####################################################
+        ####################################################
+
+
+        ####################################################
+        ####################################################
+        ### Testing training ###############################
+        ####################################################
+        ####################################################
+
+        losses = []
+        pos = []
+        for step in range(gradient_steps):
+            # Sample replay buffer
+            replay_data = self.aux_replay_buffer.sample(batch_size, env=self._vec_normalize_env)
+            with th.no_grad():
+                # Compute the next Q-values using the target network
+                next_q_values = self.q_net_target(replay_data.next_observations)
+                # Follow greedy policy: use the one with the highest value
+                next_q_values, _ = next_q_values.max(dim=1)
+                # Avoid potential broadcast issue
+                next_q_values = next_q_values.reshape(-1, 1)
+                # 1-step TD target
+                target_q_values = replay_data.rewards + (1 - replay_data.dones) * self.gamma * next_q_values
+
+            # Get current Q-values estimates
+            current_q_values = self.q_net(replay_data.observations)
+
+            # Retrieve the q-values for the actions from the replay buffer
+            current_q_values = th.gather(current_q_values, dim=1, index=replay_data.actions.long())
+
+            # Compute Huber loss (less sensitive to outliers)
+            loss = F.smooth_l1_loss(current_q_values, target_q_values)
+            losses.append(loss.item())
+
+            # Optimize the policy
+            self.policy.optimizer.zero_grad()
+            loss.backward()
+            # Clip gradient norm
+            th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
+            self.policy.optimizer.step()
+
+        # Increase update counter
+        self._n_updates += gradient_steps
+
+        # Track all losses for graphing
+        self.all_losses += losses
+
+        self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
+        self.logger.record("train/loss", np.mean(losses))
+
+        ####################################################
+        ####################################################
+        ### Testing training ###############################
+        ####################################################
+        ####################################################
 
 
 

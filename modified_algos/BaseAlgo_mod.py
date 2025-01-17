@@ -112,6 +112,7 @@ class BaseAlgorithm(ABC):
         stats_window_size: int = 100,
         tensorboard_log: Optional[str] = None,
         verbose: int = 0,
+        args = {},
         device: Union[th.device, str] = "auto",
         support_multi_env: bool = False,
         monitor_wrapper: bool = True,

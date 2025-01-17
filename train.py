@@ -1,5 +1,4 @@
 import gymnasium as gym
-import argparse
 import os
 import json
 import torch
@@ -20,6 +19,7 @@ import wandb
 from wandb.integration.sb3 import WandbCallback
 from minigrid.wrappers import RGBImgPartialObsWrapper, ImgObsWrapper
 import matplotlib as plt
+from parse_args import parse_args
 
 def format_save_file(params):
     file_string    = ""
@@ -31,65 +31,6 @@ def format_save_file(params):
     os.makedirs(file_string[:-1], mode=0o777, exist_ok=True)
 
     return file_string[:-1]
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--ddsp', default= False, type=bool)
-    parser.add_argument('--snr', default= False, type=bool)
-    parser.add_argument('--sp', default=-1, type=int,
-                        help="step penalty")
-    parser.add_argument('--iter', default=5, type=int,
-                        help="Iterations for val_it and tdmpc") # tdmpc: iterations
-    parser.add_argument('--gamma', default='.9', type=float,
-                        help="gamma/discount factor") # Called discount in tdmpc
-    parser.add_argument('--theta', default='1e-4', type=float,
-                        help="theta for val it")
-    parser.add_argument('--seed', default=420, type=int)
-    parser.add_argument('--fps', default=1, type=int)
-    parser.add_argument('--max_env_steps', default = 100, type=int) # Called episode length in tdmpc
-    parser.add_argument('--reward_file', default= 'rewards.json', type=str)
-    parser.add_argument('--algo', default='val_it',type=str,
-                        help="val_it, ppo, dqn or tdmpc")
-    parser.add_argument('--env', default='minigrid',type=str,
-                        help="minigrid or gridworld")
-    parser.add_argument('--tp', default=False,type=bool,
-                        help="Terminal Poison: Whether or not agent dies after stepping in poison. Default: False")
-    parser.add_argument('--plot_graphs', default=False,type=bool,
-                        help="Default: False")
-    parser.add_argument('--dt', default=-1,type=int, 
-                        help="Death Timer: Number of steps after stepping in poison that the agent dies. -1 means random. Default:-1")
-    parser.add_argument('--episode_length', default=100, type=int,
-                        help="Episode length")
-    parser.add_argument('--layers', default=2, type=int,
-                        help="Number of layers for network")
-    parser.add_argument('--parameters', default=64, type=int,
-                        help="Number of parameters per layer")
-    parser.add_argument('--reward_dict', default="rewards.json", type=str,
-                        help="file path to reward dict")
-    parser.add_argument('--train_steps', default=1000000, type=int,
-                        help="steps to train model")
-    parser.add_argument('--trials', default=4, type=int,
-                        help="number of runs to do")
-    parser.add_argument('--gradient_steps', default=1, type=int,
-                        help="number of gradient steps")
-    parser.add_argument('--lr', default=0.001, type=float,
-                        help="default learning rate")
-    parser.add_argument('--buffer_size', default=100000, type=int,
-                        help="buffer size")
-    parser.add_argument('--multi_buffer', default=False, type=bool,
-                        help="Experimental: Add a second buffer for specfic trajectories")
-    parser.add_argument('--teacher_force', default=False, type=bool,
-                        help="gridworld only rn: will cause the agent to use the most optimal trajectory found")
-    parser.add_argument('--script_id', default="default_name", type=str,
-                        help="Script identifier for wandb")
-    parser.add_argument('--death_timer', default=1, type=int,
-                        help="number of steps agent can take before dying after stepping in a dead area.")
-    
-
-    parser.set_defaults(gat=True)
-    args   = parser.parse_args()
-    params = vars(args)
-    return params
 
 if __name__ == '__main__':
     args             = parse_args()
@@ -203,25 +144,33 @@ if __name__ == '__main__':
         if args['algo']   == 'val_it':
             models_tested[args['algo']] = ValueIteration(args, env_size, rewardDictionary)
         elif args['algo']   == 'ppo': 
-            monitored_env = Monitor(env)
-            # models_tested[args['algo']] = (
-            #     PPO("MlpPolicy", monitored_env, verbose=verbose, ent_coef = .9, device = 'cuda', seed = seed),
-            #     monitored_env)
+
             models_tested[args['algo']] = (
-                PPO("MlpPolicy", monitored_env, verbose=verbose, n_steps = 128, batch_size= 64, gae_lambda= 0.95, gamma = .99, n_epochs = 10, ent_coef = .0, learning_rate = 2.5e-4, clip_range = 0.2 , device = 'cuda', seed = seed),
-                monitored_env)
+                PPO(input_pol, monitored_env, verbose=verbose,
+                    learning_rate = args['lr'],         # Default 0.0003
+                    n_steps       = args['n_steps'],    # Default 2048
+                    batch_size    = args['batch_size'], # Default 64
+                    gae_lambda    = args['gae_lambda'], # Default 0.95
+                    gamma         = args['gamma'],      # Default .99
+                    n_epochs      = args['n_epochs'],   # Default 10
+                    ent_coef      = args['ent_coef'],   # Default .0
+                    clip_range    = args['clip_range'], # Default 0.2
+                    vf_coef       = args['vf_coef'],    # Default 0
+                    max_grad_norm = args['mgm'],        # Default 0.5
+                    device = 'cuda', seed = seed, policy_kwargs=policy_kwargs, tensorboard_log=f"runs/{run.id}"), monitored_env)
+
         elif args['algo'] == 'dqn': 
+
             models_tested[args['algo']] = (
                 DQN2(input_pol, monitored_env, verbose=verbose, 
-                     buffer_size            = args['buffer_size'], 
-                     gradient_steps         = args['gradient_steps'], 
-                     learning_rate          = args['lr'],
-                     gamma                  = args['gamma'],
-                     multi_buffer           = args['multi_buffer'],
-                     target_update_interval = 100, 
-                     exploration_final_eps  = 0.2, 
-                     device = 'cuda', seed = seed, policy_kwargs=policy_kwargs, tensorboard_log=f"runs/{run.id}"),  
-                monitored_env)
+                     buffer_size            = args['buffer_size'],            # Default 1,000,000
+                     gradient_steps         = args['gradient_steps'],         # Default 1
+                     learning_rate          = args['lr'],                     # Default 0.001
+                     gamma                  = args['gamma'],                  # Default 0.99
+                     target_update_interval = args['target_net_update'],      # Default 10,000
+                     exploration_final_eps  = args['final_exploration_rate'], # Default 0.05
+                     args = args, device = 'cuda', seed = seed, policy_kwargs=policy_kwargs, tensorboard_log=f"runs/{run.id}"), monitored_env)
+            
         elif args['algo'] == 'all':
             for algo, model in algos.items():
                 monitored_env = Monitor(env)

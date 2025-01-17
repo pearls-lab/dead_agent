@@ -578,7 +578,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
 
         self.episode_aux_buffer.append((self._last_obs, next_obs, buffer_action, reward_, dones, infos))
 
-    def _store_transition_aux(self, replay_buffer):
+    def _store_transition_aux(self, replay_buffer, penalty):
         for last_obs, next_obs, buffer_action, reward_, dones, infos in self.episode_aux_buffer:
             replay_buffer.add(
             last_obs,  # type: ignore[arg-type]
