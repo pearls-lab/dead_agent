@@ -15,6 +15,7 @@ from stable_baselines3.common.callbacks import EvalCallback, CallbackList
 from algos.tdmpc import TDMPC
 from algos.tdmpc_helper import Episode, ReplayBuffer
 from modified_algos.dqn2 import DQN2
+from modified_algos.safe_dqn.safe_dqn import SAFE_DQN
 import wandb
 from wandb.integration.sb3 import WandbCallback
 from minigrid.wrappers import RGBImgPartialObsWrapper, ImgObsWrapper
@@ -114,27 +115,16 @@ if __name__ == '__main__':
         utils.set_seed(seed)
         algos         = {'ppo' : PPO, 'dqn': DQN2, 'val_it': ValueIteration}
         models_tested = {}
+        config = {"policy_type": "MlpPolicy", "architecture": network_arch_str}
+        for key, value in args.items():
+            config[key] = value
         run = wandb.init(
             # Set the project where this run will be logged
             project="dead-agent",
             # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
             name=folder_subpath + args['script_id'],
             # Track hyperparameters and run metadata
-            config={
-                "policy_type": "MlpPolicy",
-                "architecture": network_arch_str,
-                "env": args['env'],
-                "epochs": args['train_steps'],
-                "grad_steps": args['gradient_steps'],
-                "death_timer": args['death_timer'],
-                "algo": args['algo'],
-                "reward_dict": args['reward_dict'],
-                "script_id": args['script_id'],
-                "lr": args['lr'],
-                "buffer_size": args['buffer_size'],
-                'gamma': args['gamma'],
-                "multi_buffer": args['multi_buffer']
-            },
+            config=config,
             sync_tensorboard=True)
 
         # Personal preference: Only print verbose if it is the first trial
@@ -160,9 +150,13 @@ if __name__ == '__main__':
                     device = 'cuda', seed = seed, policy_kwargs=policy_kwargs, tensorboard_log=f"runs/{run.id}"), monitored_env)
 
         elif args['algo'] == 'dqn': 
+            if args['safe_rl']:
+                dqn_algo = SAFE_DQN
+            else:
+                dqn_algo = DQN2
 
             models_tested[args['algo']] = (
-                DQN2(input_pol, monitored_env, verbose=verbose, 
+                dqn_algo(input_pol, monitored_env, verbose=verbose, 
                      buffer_size            = args['buffer_size'],            # Default 1,000,000
                      gradient_steps         = args['gradient_steps'],         # Default 1
                      learning_rate          = args['lr'],                     # Default 0.001

@@ -12,7 +12,7 @@ from gymnasium import spaces
 
 # from stable_baselines3.common.base_class import BaseAlgorithm
 from modified_algos.BaseAlgo_mod import BaseAlgorithm
-from stable_baselines3.common.buffers import DictReplayBuffer, ReplayBuffer
+from modified_algos.safe_dqn.mod_replay_buffer import DictReplayBuffer, ReplayBuffer
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.noise import ActionNoise, VectorizedActionNoise
 from stable_baselines3.common.policies import BasePolicy
@@ -150,6 +150,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         self.use_sde_at_warmup = use_sde_at_warmup
 
         # Super janky, just for testing:
+        self.episode_reg_buffer = []
         self.episode_aux_buffer = []
         self.aux_replay_buffer: Optional[ReplayBuffer] = None 
 
@@ -488,7 +489,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         else:
             # Avoid changing the original ones
             self._last_original_obs, new_obs_, reward_ = self._last_obs, new_obs, reward
-
+        if reward_[0] < -1:
+            reward_ = reward_ * 0
         # Avoid modification by reference
         next_obs = deepcopy(new_obs_)
         # As the VecEnv resets automatically, new_obs is already the
@@ -523,8 +525,9 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         if self._vec_normalize_env is not None:
             self._last_original_obs = new_obs_
 
-    def _store_transition_aux_prep(
+    def _store_transition_prep(
         self,
+        rollout_holder, 
         buffer_action: np.ndarray,
         new_obs: Union[np.ndarray, dict[str, np.ndarray]],
         reward: np.ndarray,
@@ -576,20 +579,20 @@ class OffPolicyAlgorithm(BaseAlgorithm):
                     if self._vec_normalize_env is not None:
                         next_obs[i] = self._vec_normalize_env.unnormalize_obs(next_obs[i, :])
 
-        self.episode_aux_buffer.append((self._last_obs, next_obs, buffer_action, reward_, dones, infos))
+        rollout_holder.append((self._last_obs, next_obs, buffer_action, reward_, dones, infos))
 
-    def _store_transition_aux(self, replay_buffer, penalty):
-        for last_obs, next_obs, buffer_action, reward_, dones, infos in self.episode_aux_buffer:
-            replay_buffer.add(
-            last_obs,  # type: ignore[arg-type]
-            next_obs,  # type: ignore[arg-type]
-            buffer_action,
-            reward_,
-            dones,
-            infos,
-        )
+    # def _store_transition(self, rollout_holder, replay_buffer, penalty):
+    #     for last_obs, next_obs, buffer_action, reward_, dones, infos in rollout_holder:
+    #         replay_buffer.add(
+    #         last_obs,  # type: ignore[arg-type]
+    #         next_obs,  # type: ignore[arg-type]
+    #         buffer_action,
+    #         reward_,
+    #         dones,
+    #         infos,
+    #     )
             
-        self.episode_aux_buffer = []
+    #     rollout_holder = []
 
 
     def collect_rollouts(
@@ -664,9 +667,6 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             # Store data in replay buffer (normalized action and unnormalized observation)
             self._store_transition(replay_buffer, buffer_actions, new_obs, rewards, dones, infos)  # type: ignore[arg-type]
 
-            if self.args['multi_buffer']:
-                self._store_transition_aux_prep(buffer_actions, new_obs, rewards, dones, infos)
-
             self._update_current_progress_remaining(self.num_timesteps, self._total_timesteps)
 
             # For DQN, check if the target network should be updated
@@ -680,11 +680,6 @@ class OffPolicyAlgorithm(BaseAlgorithm):
                     # Update stats
                     num_collected_episodes += 1
                     self._episode_num += 1
-                    if self.args['multi_buffer']:
-                        if rewards[idx] > 1:
-                            self._store_transition_aux(self.aux_replay_buffer)
-                        else:
-                            self.episode_aux_buffer = []
                     if action_noise is not None:
                         kwargs = dict(indices=[idx]) if env.num_envs > 1 else {}
                         action_noise.reset(**kwargs)

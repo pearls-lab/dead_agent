@@ -33,7 +33,7 @@ def parse_args():
                         help="file path to reward dict")
     parser.add_argument('--train_steps', default=1000000, type=int,
                         help="steps to train model")
-    parser.add_argument('--trials', default=4, type=int,
+    parser.add_argument('--trials', default=1, type=int,
                         help="number of runs to do")
     parser.add_argument('--lr', default=0.001, type=float,
                         help="default learning rate")
@@ -45,6 +45,8 @@ def parse_args():
                         help="number of steps agent can take before dying after stepping in a dead area.")
     parser.add_argument('--final_exploration_rate', default=0.05, type=float,
                         help="Final exploration rate for agents (decays from 1)")
+    parser.add_argument('--safe_rl', default=False, type=bool,
+                        help="Experimental: Uses CMDP paradigm instead")
     
     # DQN
     parser.add_argument('--target_net_update', default=100, type=float,

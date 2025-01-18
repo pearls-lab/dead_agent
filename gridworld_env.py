@@ -330,6 +330,9 @@ class GridWorldEnv(gym.Env):
         truncated               = False
         observation             = self._get_obs()
         info                    = self._get_info()
+        info['died']            = False
+        if reward < -1:
+            info['died']        = True
         self.all_locs.append(self.get_flat_loc(self._agent_location))
         if self.steps > self.max_steps: terminated = True
         self.cumulative_reward += reward
