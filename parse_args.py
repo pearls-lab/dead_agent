@@ -45,6 +45,8 @@ def parse_args():
                         help="number of steps agent can take before dying after stepping in a dead area.")
     parser.add_argument('--final_exploration_rate', default=0.05, type=float,
                         help="Final exploration rate for agents (decays from 1)")
+    parser.add_argument('--exploration_fraction', default=0.1, type=float,
+                        help="Duration to decay exploration (frac of training period)")
     parser.add_argument('--safe_rl', default=False, type=bool,
                         help="Experimental: Uses CMDP paradigm instead")
     

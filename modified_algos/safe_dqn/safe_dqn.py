@@ -77,6 +77,7 @@ class SAFE_DQN(OffPolicyAlgorithm):
     q_net_target: QNetwork
     policy: DQNPolicy
     safe_policy: QNetwork
+    safe_policy_target: QNetwork
 
     def __init__(
         self,
@@ -175,9 +176,10 @@ class SAFE_DQN(OffPolicyAlgorithm):
                 )
 
     def _create_aliases(self) -> None:
-        self.q_net        = self.policy.q_net
-        self.q_net_target = self.policy.q_net_target
-        self.safe_policy  = self.policy.make_q_net()
+        self.q_net              = self.policy.q_net
+        self.q_net_target       = self.policy.q_net_target
+        self.safe_policy        = self.policy.make_q_net()
+        self.safe_policy_target = self.policy.make_q_net()
 
     def _on_step(self) -> None:
         """
@@ -189,6 +191,7 @@ class SAFE_DQN(OffPolicyAlgorithm):
         # each call to step() corresponds to n_envs transitions
         if self._n_calls % max(self.target_update_interval // self.n_envs, 1) == 0:
             polyak_update(self.q_net.parameters(), self.q_net_target.parameters(), self.tau)
+            polyak_update(self.safe_policy.parameters(), self.safe_policy_target.parameters(), self.tau)
             # Copy running stats, see GH issue #996
             polyak_update(self.batch_norm_stats, self.batch_norm_stats_target, 1.0)
 
@@ -198,22 +201,21 @@ class SAFE_DQN(OffPolicyAlgorithm):
     def train(self, gradient_steps: int, batch_size: int = 100) -> None:
         # Switch to train mode (this affects batch norm / dropout)
         self.policy.set_training_mode(True)
+        self.safe_policy.set_training_mode(True)
+        self.safe_policy_target.set_training_mode(True)
         # Update learning rate according to schedule
         self._update_learning_rate(self.policy.optimizer)
 
-        ####################################################
-        ####################################################
-        ### Actual training ################################
-        ####################################################
-        ####################################################
         losses = []
         pos = []
+        costs = []
+        non_cost_loss = []
         for step in range(gradient_steps):
             # Sample replay buffer
             replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
 
-            # Normal 
             with th.no_grad():
+                ################# Regular ################################################################
                 # Compute the next Q-values using the target network
                 next_q_values = self.q_net_target(replay_data.next_observations)
                 # Follow greedy policy: use the one with the highest value
@@ -223,16 +225,33 @@ class SAFE_DQN(OffPolicyAlgorithm):
                 # 1-step TD target
                 target_q_values = replay_data.rewards + (1 - replay_data.dones) * self.gamma * next_q_values
 
+                # Safe_RL (basically just a seperate Q-network calculating the 'cost')
+                # Calling them 'cost' values because I am uncreative
+                next_c_values = self.safe_policy_target(replay_data.next_observations)
+                next_c_values, _ = next_c_values.max(dim = 1)  # Follow greedy policy, use one with highest (or basically least non-negative) value
+                next_c_values = next_c_values.reshape(-1, 1)
+                target_c_values = replay_data.costs + (1 - replay_data.dones) * self.gamma * next_c_values
+
+
+
+
             # Get current Q-values estimates
             current_q_values = self.q_net(replay_data.observations)
 
             # Retrieve the q-values for the actions from the replay buffer
             current_q_values = th.gather(current_q_values, dim=1, index=replay_data.actions.long())
+            
+            current_c_values = self.safe_policy(replay_data.observations)
+            current_c_values = th.gather(current_c_values, dim = 1, index= replay_data.actions.long())
 
             # Compute Huber loss (less sensitive to outliers)
-            loss = F.smooth_l1_loss(current_q_values, target_q_values)
-            losses.append(loss.item())
+            loss1 = F.smooth_l1_loss(current_q_values, target_q_values)
+            loss2 = F.smooth_l1_loss(current_c_values, target_c_values)
 
+            loss = loss1 + loss2
+            losses.append(loss.item())
+            costs.append(loss2.item())
+            non_cost_loss.append(loss1.item())
             # Optimize the policy
             self.policy.optimizer.zero_grad()
             loss.backward()
@@ -248,66 +267,9 @@ class SAFE_DQN(OffPolicyAlgorithm):
 
         self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
         self.logger.record("train/loss", np.mean(losses))
-
-        ####################################################
-        ####################################################
-        ### Actual training ################################
-        ####################################################
-        ####################################################
-
-
-        # ####################################################
-        # ####################################################
-        # ### Testing training ###############################
-        # ####################################################
-        # ####################################################
-
-        # losses = []
-        # pos = []
-        # for step in range(gradient_steps):
-        #     # Sample replay buffer
-        #     replay_data = self.aux_replay_buffer.sample(batch_size, env=self._vec_normalize_env)
-        #     with th.no_grad():
-        #         # Compute the next Q-values using the target network
-        #         next_q_values = self.q_net_target(replay_data.next_observations)
-        #         # Follow greedy policy: use the one with the highest value
-        #         next_q_values, _ = next_q_values.max(dim=1)
-        #         # Avoid potential broadcast issue
-        #         next_q_values = next_q_values.reshape(-1, 1)
-        #         # 1-step TD target
-        #         target_q_values = replay_data.rewards + (1 - replay_data.dones) * self.gamma * next_q_values
-
-        #     # Get current Q-values estimates
-        #     current_q_values = self.q_net(replay_data.observations)
-
-        #     # Retrieve the q-values for the actions from the replay buffer
-        #     current_q_values = th.gather(current_q_values, dim=1, index=replay_data.actions.long())
-
-        #     # Compute Huber loss (less sensitive to outliers)
-        #     loss = F.smooth_l1_loss(current_q_values, target_q_values)
-        #     losses.append(loss.item())
-
-        #     # Optimize the policy
-        #     self.policy.optimizer.zero_grad()
-        #     loss.backward()
-        #     # Clip gradient norm
-        #     th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
-        #     self.policy.optimizer.step()
-
-        # # Increase update counter
-        # self._n_updates += gradient_steps
-
-        # # Track all losses for graphing
-        # self.all_losses += losses
-
-        # self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
-        # self.logger.record("train/loss", np.mean(losses))
-
-        # ####################################################
-        # ####################################################
-        # ### Testing training ###############################
-        # ####################################################
-        # ####################################################
+        self.logger.record("train/cost_loss", np.mean(costs))
+        self.logger.record("train/reg_loss", np.mean(non_cost_loss))
+        
 
 
 
@@ -338,7 +300,48 @@ class SAFE_DQN(OffPolicyAlgorithm):
             else:
                 action = np.array(self.action_space.sample())
         else:
-            action, state = self.policy.predict(observation, state, episode_start, deterministic)
+            # Bad code but just trying to get this working. Will clean it up later if things are actually working. Basically replicating 
+            # predict code from the BasePolicy class, but would rather have it localized here rather than make like 8 other 
+            # class files
+            self.policy.set_training_mode(False)
+            self.safe_policy.set_training_mode(False)
+
+            if isinstance(observation, tuple) and len(observation) == 2 and isinstance(observation[1], dict):
+                raise ValueError(
+                    "You have passed a tuple to the predict() function instead of a Numpy array or a Dict. "
+                    "You are probably mixing Gym API with SB3 VecEnv API: `obs, info = env.reset()` (Gym) "
+                    "vs `obs = vec_env.reset()` (SB3 VecEnv). "
+                    "See related issue https://github.com/DLR-RM/stable-baselines3/issues/1694 "
+                    "and documentation for more information: https://stable-baselines3.readthedocs.io/en/master/guide/vec_envs.html#vecenv-api-vs-gym-api"
+                )
+            
+            obs_tensor, vectorized_env = self.policy.obs_to_tensor(observation)
+
+            with th.no_grad():
+                q_values = self.policy.q_net(obs_tensor)
+                c_values = self.safe_policy(obs_tensor)
+
+                final_values = q_values + c_values
+
+                action = final_values.argmax(dim=1).reshape(-1)
+
+            action = action.cpu().numpy().reshape((-1, *self.policy.action_space.shape))  # type: ignore[misc]
+
+            if isinstance(self.policy.action_space, spaces.Box):
+                if self.squash_output:
+                    # Rescale to proper domain when using squashing
+                    action = self.policy.unscale_action(actions)  # type: ignore[assignment, arg-type]
+                else:
+                    # Actions could be on arbitrary scale, so clip the actions to avoid
+                    # out of bound error (e.g. if sampling from a Gaussian distribution)
+                    action = np.clip(action, self.policy.action_space.low, self.policy.action_space.high)  # type: ignore[assignment, arg-type]
+
+            # Remove batch dimension if needed
+            if not vectorized_env:
+                assert isinstance(action, np.ndarray)
+                action = action.squeeze(axis=0)
+
+            state = None
 
         return action, state
 

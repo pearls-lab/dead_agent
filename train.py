@@ -118,6 +118,7 @@ if __name__ == '__main__':
         config = {"policy_type": "MlpPolicy", "architecture": network_arch_str}
         for key, value in args.items():
             config[key] = value
+        config['seed'] = seed
         run = wandb.init(
             # Set the project where this run will be logged
             project="dead-agent",
@@ -152,8 +153,10 @@ if __name__ == '__main__':
         elif args['algo'] == 'dqn': 
             if args['safe_rl']:
                 dqn_algo = SAFE_DQN
+                print("Using experimental Safe RL")
             else:
                 dqn_algo = DQN2
+                print("Using standard dqn")
 
             models_tested[args['algo']] = (
                 dqn_algo(input_pol, monitored_env, verbose=verbose, 
@@ -163,6 +166,7 @@ if __name__ == '__main__':
                      gamma                  = args['gamma'],                  # Default 0.99
                      target_update_interval = args['target_net_update'],      # Default 10,000
                      exploration_final_eps  = args['final_exploration_rate'], # Default 0.05
+                     exploration_fraction   = args['exploration_fraction'],   # Default 0.1
                      args = args, device = 'cuda', seed = seed, policy_kwargs=policy_kwargs, tensorboard_log=f"runs/{run.id}"), monitored_env)
             
         elif args['algo'] == 'all':

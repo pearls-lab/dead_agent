@@ -338,6 +338,8 @@ class GridWorldEnv(gym.Env):
         self.cumulative_reward += reward
         self.current_traj.append(observation)
         assert len(self.current_traj) == self.steps + 1
+        if reward > 0:
+            print("Goal found!")
         return observation, reward, terminated, truncated, info
     
     def save_trajectories(self):

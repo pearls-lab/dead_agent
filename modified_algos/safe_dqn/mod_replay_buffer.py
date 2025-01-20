@@ -15,6 +15,7 @@ from stable_baselines3.common.type_aliases import (
     ReplayBufferSamples,
     RolloutBufferSamples,
 )
+from modified_algos.safe_dqn.mod_type_aliases import ReplayBufferSamplesCost
 from stable_baselines3.common.utils import get_device
 from stable_baselines3.common.vec_env import VecNormalize
 
@@ -276,7 +277,7 @@ class ReplayBuffer(BaseBuffer):
         self.actions[self.pos] = np.array(action)
         self.rewards[self.pos] = np.array(reward)
         self.dones[self.pos] = np.array(done)
-        self.costs[self.pos] = np.array([info.get("died", False) * -10 for info in infos])
+        self.costs[self.pos] = np.array([min(info.get("died", False) * -10, -0.1) for info in infos])
 
         if self.handle_timeout_termination:
             self.timeouts[self.pos] = np.array([info.get("TimeLimit.truncated", False) for info in infos])
@@ -325,8 +326,9 @@ class ReplayBuffer(BaseBuffer):
             # deactivated by default (timeouts is initialized as an array of False)
             (self.dones[batch_inds, env_indices] * (1 - self.timeouts[batch_inds, env_indices])).reshape(-1, 1),
             self._normalize_reward(self.rewards[batch_inds, env_indices].reshape(-1, 1), env),
+            self._normalize_reward(self.costs[batch_inds, env_indices].reshape(-1, 1), env) # probably smarter way to do this but am just keeping it like this to make my life easier for now
         )
-        return ReplayBufferSamples(*tuple(map(self.to_torch, data)))
+        return ReplayBufferSamplesCost(*tuple(map(self.to_torch, data)))
 
     @staticmethod
     def _maybe_cast_dtype(dtype: np.typing.DTypeLike) -> np.typing.DTypeLike:

@@ -489,8 +489,11 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         else:
             # Avoid changing the original ones
             self._last_original_obs, new_obs_, reward_ = self._last_obs, new_obs, reward
-        if reward_[0] < -1:
+        if reward_[0] < 0:
+            print("neg rew", reward_)
             reward_ = reward_ * 0
+        else:
+            print("Pos rew:", reward_)
         # Avoid modification by reference
         next_obs = deepcopy(new_obs_)
         # As the VecEnv resets automatically, new_obs is already the
