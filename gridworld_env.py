@@ -8,15 +8,16 @@ import utils
 from distutils.util import strtobool
 import pickle
 import random
+import json
 from target_chords import TARGET_CHORD
 
 
 class GridWorldEnv(gym.Env):
 
-    def __init__(self, args, size: int = 5):
+    def __init__(self, args, size):
         self.args                 = args
 
-        self.observation_space    = gym.spaces.Box(low = -1, high = 100, shape=(600,), dtype = float)
+        self.observation_space    = gym.spaces.Box(low = -1, high = 100, shape=(600,), dtype = int)
         # Each # represents a specific chord (this mapping is automatically done when converting to a midi file.)
         self.CLASS_LIST = [43, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81]
         # Hard coded for speed:
@@ -41,6 +42,10 @@ class GridWorldEnv(gym.Env):
         self.subob_traj            = []
         self.total_resets          = 0
 
+        self.composer_chords       = []
+        self.num_iterations        = 100 # Number of times to train on a specific piece before switching
+        self.curr_iterations       = 0
+
     
     def _get_obs(self):
         return np.array(self.TARGET_CHORD[:self.steps] + [-1] * (self.max_steps - self.steps))
@@ -49,8 +54,17 @@ class GridWorldEnv(gym.Env):
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         # We need the following line to seed self.np_random
         super().reset(seed=seed)
-        # Reset Internal Metrics
 
+        if len(self.composer_chords) == 0:
+            with open('composer_chords.json', 'r') as file:
+                composer_chords = json.load(file)
+            assert self.args['composer'] in composer_chords.keys(), "Invalid composer, please see valid_composers.txt for valid composers"
+            self.composer_chords = composer_chords[self.args['composer']]
+
+        self.curr_iterations  += 1
+        if self.curr_iterations > self.num_iterations:
+            self.curr_iterations = 0
+            self.TARGET_CHORD = random.choice(self.composer_chords)
         self.current_acts      = []
         self.current_traj      = []
         self.steps             = 0
@@ -73,10 +87,13 @@ class GridWorldEnv(gym.Env):
                     reward += 1
             # Otherwise, assume guessing a chord:
             elif self.idx_to_chord[int(action)] == self.TARGET_CHORD[self.steps]:
+                print(f"Chord: {self.idx_to_chord[int(action)]}")
                 reward += 1
             else:
+                print(f"Chord: {self.idx_to_chord[int(action)]}")
                 reward = -1
         else: reward -= 1  
+        print(f'Target chord: {self.TARGET_CHORD[self.steps]}')
         self.steps             += 1
         observation             = self._get_obs()
         if self.steps > self.max_steps: terminated = True
@@ -85,7 +102,6 @@ class GridWorldEnv(gym.Env):
         self.current_traj.append(observation)
         truncated = False
         info = {"true path": self.TARGET_CHORD}
-        print("New obs: ", observation)
         return observation, reward, terminated, truncated, info
     
     def save_trajectories(self):

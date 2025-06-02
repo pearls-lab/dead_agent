@@ -1,6 +1,7 @@
 import argparse
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--composer', default='beethoven')
     parser.add_argument('--ddsp', default= False, type=bool)
     parser.add_argument('--snr', default= False, type=bool)
     parser.add_argument('--sp', default=-1, type=int,
@@ -50,7 +51,7 @@ def parse_args():
     parser.add_argument('--safe_rl', default=False, type=bool,
                         help="Experimental: Uses CMDP paradigm instead")
 
-    parser.add_argument('--root_checkpoint_save_dir', default='/root/home', type=str,
+    parser.add_argument('--root_checkpoint_save_dir', default='/root/home/', type=str,
                         help="Root of where to save model checkpoints. Default /root/home/")
     
     # DQN
