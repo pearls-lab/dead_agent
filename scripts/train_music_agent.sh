@@ -1,1 +1,3 @@
-python train.py --algo ppo --env gridworld --layers 2 --parameters 512 --gradient_steps 6 --reward_dict ./two_wall.json --lr 1e-05 --script_id learning_rate > ./logs/two_wall/algo_dqn_lr_1e-05.txt
+python train.py --algo ppo --env gridworld --layers 2 --parameters 512 --root_checkpoint_save_dir ./logs/ --gradient_steps 6 --reward_dict ./two_wall.json --lr 1e-05 --script_id learning_rate > ./logs/two_wall/algo_dqn_lr_1e-05.txt
+
+python train.py --algo ppo --env gridworld --layers 2 --parameters 512 --root_checkpoint_save_dir ./logs/ --gradient_steps 6 --reward_dict ./two_wall.json --lr 1e-05 --script_id learning_rate > ./logs/two_wall/algo_dqn_lr_1e-05.txt --ent_coef 0 --vf_coef 0 --batch_size 256 --lr 0.3
