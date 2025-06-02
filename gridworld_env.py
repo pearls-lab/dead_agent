@@ -16,7 +16,7 @@ class GridWorldEnv(gym.Env):
     def __init__(self, args, size: int = 5):
         self.args                 = args
 
-        self.observation_space    = gym.spaces.Box(low = --1, high = 100, shape=(600,), dtype = float)
+        self.observation_space    = gym.spaces.Box(low = -1, high = 100, shape=(600,), dtype = float)
         # Each # represents a specific chord (this mapping is automatically done when converting to a midi file.)
         self.CLASS_LIST = [43, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81]
         # Hard coded for speed:
@@ -76,7 +76,6 @@ class GridWorldEnv(gym.Env):
                 reward += 1
             else:
                 reward = -1
-
         else: reward -= 1  
         self.steps             += 1
         observation             = self._get_obs()

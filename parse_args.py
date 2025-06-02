@@ -49,6 +49,9 @@ def parse_args():
                         help="Duration to decay exploration (frac of training period)")
     parser.add_argument('--safe_rl', default=False, type=bool,
                         help="Experimental: Uses CMDP paradigm instead")
+
+    parser.add_argument('--root_checkpoint_save_dir', default='/root/home', type=str,
+                        help="Root of where to save model checkpoints. Default /root/home/")
     
     # DQN
     parser.add_argument('--target_net_update', default=100, type=float,

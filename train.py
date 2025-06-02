@@ -184,7 +184,7 @@ if __name__ == '__main__':
                 print("Model size:", model.policy)
                 ##########################################################################################################
                 ##########################################################################################################
-                eval_callback = EvalCallback(monitored_eval_env, best_model_save_path='/root/home/' + args['env'] + '/models/' + folder_subpath + algo + '/', eval_freq=int(args['train_steps']/1000),
+                eval_callback = EvalCallback(monitored_eval_env, best_model_save_path=args['root_checkpoint_save_dir'] + args['env'] + '/models/' + folder_subpath + algo + '/', eval_freq=int(args['train_steps']/1000),
                                 deterministic=False, render=False, verbose=0)
                 ##########################################################################################################
                 ##########################################################################################################
