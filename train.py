@@ -9,13 +9,13 @@ from gridworld_env import GridWorldEnv
 from minigrid_custom import SimpleEnv
 from minigrid_utils.feature_extractor import MinigridFeaturesExtractor
 from algos.val_it import ValueIteration
-from sb3.stable_baselines3 import A2C, DQN, PPO
+from stable_baselines3 import A2C, DQN, PPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import EvalCallback, CallbackList
 from algos.tdmpc import TDMPC
 from algos.tdmpc_helper import Episode, ReplayBuffer
-from modified_algos.dqn2 import DQN2
-from modified_algos.safe_dqn.safe_dqn import SAFE_DQN
+# from modified_algos.dqn2 import DQN2
+# from modified_algos.safe_dqn.safe_dqn import SAFE_DQN
 import wandb
 from wandb.integration.sb3 import WandbCallback
 from minigrid.wrappers import RGBImgPartialObsWrapper, ImgObsWrapper
@@ -75,9 +75,9 @@ if __name__ == '__main__':
         input_pol  = "MlpPolicy"
         env_size   = 10
         env        = gym.make("gymnasium_env/GridWorld-v0", args = args, size=env_size).env
-        env.load_rewards(rewardDictionary)
+        env.reset()
         env_eval        = gym.make("gymnasium_env/GridWorld-v0", args = args, size=env_size).env
-        env_eval.load_rewards(rewardDictionary, eval_env = True)
+        env_eval.reset()
     # Minigrid
     elif args['env'] == 'minigrid':
         policy_kwargs["features_extractor_class"]  = MinigridFeaturesExtractor
@@ -113,7 +113,7 @@ if __name__ == '__main__':
     for trial_no in range(args['trials']):
         seed          = seeds[trial_no]
         utils.set_seed(seed)
-        algos         = {'ppo' : PPO, 'dqn': DQN2, 'val_it': ValueIteration}
+        algos         = {'ppo' : PPO, 'val_it': ValueIteration}
         models_tested = {}
         config = {"policy_type": "MlpPolicy", "architecture": network_arch_str}
         for key, value in args.items():
