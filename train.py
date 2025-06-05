@@ -37,7 +37,7 @@ if __name__ == '__main__':
     args             = parse_args()
 
     network_arch = []
-    folder_subpath = "./logs/dead_ears/"
+    folder_subpath = "./logs/dead_ears/" + args['composer'] + "/"
 
     for layer in range(args['layers'] + 1):
         network_arch.append(args['parameters'])

@@ -41,6 +41,8 @@ class GridWorldEnv(gym.Env):
         self.current_acts          = []
         self.subob_traj            = []
         self.total_resets          = 0
+        self.action_chords         = []
+        self.prev_action           = -1
 
         self.composer_chords       = []
         self.num_iterations        = 100 # Number of times to train on a specific piece before switching
@@ -54,6 +56,9 @@ class GridWorldEnv(gym.Env):
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         # We need the following line to seed self.np_random
         super().reset(seed=seed)
+        print("Action chords:, ", self.action_chords)
+        print(self.TARGET_CHORD)
+        self.action_chords = []
 
         if len(self.composer_chords) == 0:
             with open('composer_chords.json', 'r') as file:
@@ -77,8 +82,11 @@ class GridWorldEnv(gym.Env):
 
     def step(self, action):
         reward = 0
-        print("Action:", action)
         # We use `np.clip` to make sure we don't leave the grid bounds
+        if action >= 0 and action <= 1:
+            self.action_chords.append(int(action))
+        else:
+            self.action_chords.append(self.TARGET_CHORD[self.steps])
         if action >= 0 and action < len(self.CLASS_LIST):
             # action 0 = 'no chords'
             # action 1 = end current chord
@@ -87,13 +95,13 @@ class GridWorldEnv(gym.Env):
                     reward += 1
             # Otherwise, assume guessing a chord:
             elif self.idx_to_chord[int(action)] == self.TARGET_CHORD[self.steps]:
-                print(f"Chord: {self.idx_to_chord[int(action)]}")
                 reward += 1
             else:
-                print(f"Chord: {self.idx_to_chord[int(action)]}")
                 reward = -1
         else: reward -= 1  
-        print(f'Target chord: {self.TARGET_CHORD[self.steps]}')
+        if int(action) == self.prev_action and (self.prev_action == 1 or self.prev_action == 0):
+            reward = -5
+        # print(f'Target chord: {self.TARGET_CHORD[self.steps]}')
         self.steps             += 1
         observation             = self._get_obs()
         if self.steps > self.max_steps: terminated = True
@@ -102,6 +110,7 @@ class GridWorldEnv(gym.Env):
         self.current_traj.append(observation)
         truncated = False
         info = {"true path": self.TARGET_CHORD}
+        self.prev_action = int(action)
         return observation, reward, terminated, truncated, info
     
     def save_trajectories(self):

@@ -8,7 +8,7 @@ def parse_args():
                         help="step penalty")
     parser.add_argument('--iter', default=5, type=int,
                         help="Iterations for val_it and tdmpc") # tdmpc: iterations
-    parser.add_argument('--gamma', default='.99', type=float,
+    parser.add_argument('--gamma', default='.0', type=float,
                         help="gamma/discount factor") # Called discount in tdmpc
     parser.add_argument('--theta', default='1e-4', type=float,
                         help="theta for val it")
